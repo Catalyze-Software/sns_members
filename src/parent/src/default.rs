@@ -64,3 +64,10 @@ pub fn __export_did_tmp_() -> String {
     export_service!();
     __export_service()
 }
+
+// Method used to save the candid interface to a file
+#[test]
+pub fn candid() {
+    use ic_scalable_misc::helpers::candid_helper::save_candid;
+    save_candid(__export_did_tmp_(), String::from("parent"));
+}

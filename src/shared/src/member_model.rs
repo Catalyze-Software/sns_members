@@ -1,5 +1,4 @@
-use candid::Principal;
-use ic_cdk::export::candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]

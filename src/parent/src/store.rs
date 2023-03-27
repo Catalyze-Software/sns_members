@@ -425,7 +425,8 @@ impl ScalableData {
         old_store: &ScalableData,
         version: u64,
     ) -> Result<WasmDetails, String> {
-        let bytes = include_bytes!("../../../../wasm/demo_child_canister.wasm").to_vec();
+        let bytes: Vec<u8> = vec![];
+        // let bytes = include_bytes!("../../../../wasm/demo_child_canister.wasm").to_vec();
 
         if bytes.is_empty() {
             return Err("No WASM found, skipping child WASM update".to_string());
