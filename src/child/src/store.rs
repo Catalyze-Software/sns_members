@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, iter::FromIterator, vec};
+use std::{cell::RefCell, vec};
 
 use candid::Principal;
 use ic_cdk::{
@@ -10,12 +10,14 @@ use ic_scalable_misc::{
     enums::{
         api_error_type::{ApiError, ApiErrorType},
         privacy_type::{Gated, Privacy},
-        whitelist_rights_type::WhitelistRights,
     },
     helpers::{
         error_helper::api_error,
         role_helper::{default_roles, get_group_roles, has_permission},
-        token_canister_helper::{dip20_balance_of, ext_balance_of, legacy_dip721_balance_of},
+        serialize_helper::serialize,
+        token_canister_helper::{
+            dip20_balance_of, dip721_balance_of, ext_balance_of, legacy_dip721_balance_of,
+        },
     },
     models::{
         identifier_model::Identifier,
@@ -34,6 +36,7 @@ thread_local! {
 pub struct Store;
 
 impl Store {
+    // Method used to join a group
     pub async fn join_group(
         caller: Principal,
         group_identifier: Principal,
@@ -96,6 +99,7 @@ impl Store {
                     }
                 };
 
+                // get the updated member
                 let updated_member = Self::add_invite_or_join_group_to_member(
                     caller,
                     group_identifier,
@@ -105,36 +109,48 @@ impl Store {
                 )
                 .await;
 
+                // update the member
                 match updated_member {
+                    // if the call fails return an error
                     Err(err) => Err(err),
+                    // if the call succeeds, continue
                     Ok(_updated_member) => match existing_member {
                         None => {
+                            // if there is no existing member, add a new one
                             let result = DATA.with(|data| {
                                 Data::add_entry(data, _updated_member, Some("mbr".to_string()))
                             });
+                            // fire and forget inter canister call to update the group member count on the group canister
                             Self::update_member_count_on_group(&group_identifier);
                             result
                         }
+                        // if there is an existing member, update the existing one
                         Some((_identifier, _)) => {
+                            // update the member
                             let result = DATA.with(|data| {
                                 Data::update_entry(data, _identifier, _updated_member)
                             });
+                            // fire and forget inter canister call to update the group member count on the group canister
                             Self::update_member_count_on_group(&group_identifier);
                             result
                         }
                     },
                 }
-                // add scaling logic
+                // TODO: add scaling logic
                 // Determine if an entry needs to be updated or added as a new one
             }
         }
     }
 
+    // Method to create an empty member
     pub fn create_empty_member(
         caller: Principal,
         profile_identifier: Principal,
     ) -> Result<Principal, ApiError> {
+        // Decode the profile identifier
         let (_, _, kind) = Identifier::decode(&profile_identifier);
+
+        // If the kind is not pfe, throw an error
         if kind != "pfe".to_string() {
             return Err(api_error(
                 ApiErrorType::NotFound,
@@ -145,16 +161,17 @@ impl Store {
                 None,
             ));
         } else {
-            let existing = Self::_get_member_from_caller(caller);
-
-            match existing {
+            // If the kind is pfe, continue
+            match Self::_get_member_from_caller(caller) {
                 None => {
+                    // If there is no existing member, create a new one
                     let empty_member = Member {
                         principal: caller,
                         profile_identifier,
                         joined: vec![],
                         invites: vec![],
                     };
+                    // Add the new member
                     let result = DATA
                         .with(|data| Data::add_entry(data, empty_member, Some("mbr".to_string())));
                     match result {
@@ -162,6 +179,7 @@ impl Store {
                         Err(err) => Err(err),
                     }
                 }
+                // If there is an existing member, throw an error
                 Some(_) => Err(api_error(
                     ApiErrorType::BadRequest,
                     "ALREADY_MEMBER",
@@ -174,12 +192,18 @@ impl Store {
         }
     }
 
+    // Method to leave a group
     pub fn leave_group(caller: Principal, group_identifier: Principal) -> Result<(), ApiError> {
+        // Get the existing member
         let existing_member = Self::_get_member_from_caller(caller);
 
         match existing_member {
+            // If there is no existing member, throw an error
             None => Err(Self::_member_not_found_error("leave_group", None)),
+
+            // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
+                // Filter out the group identifier from the joined array
                 let joined: Vec<Join> = _member
                     .joined
                     .iter()
@@ -187,38 +211,51 @@ impl Store {
                     .cloned()
                     .collect();
 
+                // Update the joined array
                 _member.joined = joined;
+                // Update the member
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(Self::update_member_count_on_group(&group_identifier))
             }
         }
     }
 
+    // Method to remove an invite from a member
     pub fn remove_invite(caller: Principal, group_identifier: Principal) -> Result<(), ApiError> {
+        // Get the existing member
         let existing_member = Self::_get_member_from_caller(caller);
         match existing_member {
+            // If there is no existing member, throw an error
             None => Err(Self::_member_not_found_error("leave_group", None)),
+            // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
+                // Filter out the group identifier from the invites array
                 let invites: Vec<Invite> = _member
                     .invites
                     .into_iter()
                     .filter(|j| &j.group_identifier != &group_identifier)
                     .collect();
 
+                // Update the invites array
                 _member.invites = invites;
+                // Update the member
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(())
             }
         }
     }
 
+    // Method to assign a group role to a member
     pub fn assign_role(
         role: String,
         member_identifier: Principal,
         group_identifier: Principal,
     ) -> Result<(), ()> {
+        // Get the existing member
         let member = DATA.with(|data| Data::get_entry(data, member_identifier));
+
         if let Ok((_identifier, mut _member)) = member {
+            // Get the existing roles for the group
             let existing_roles = _member
                 .joined
                 .iter()
@@ -231,6 +268,7 @@ impl Store {
                 return Err(());
             }
 
+            // Update the joined array
             let joined: Vec<Join> = _member
                 .joined
                 .into_iter()
@@ -250,6 +288,7 @@ impl Store {
                 })
                 .collect();
 
+            // Update the member
             _member.joined = joined;
             let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
             Ok(())
@@ -258,17 +297,21 @@ impl Store {
         }
     }
 
+    // method to remove a role from a member
     pub fn remove_role(
         role: String,
         member_identifier: Principal,
         group_identifier: Principal,
     ) -> Result<(), ()> {
+        // Get the existing member
         let member = DATA.with(|data| Data::get_entry(data, member_identifier));
         if let Ok((_identifier, mut _member)) = member {
+            // Update the joined array
             let joined: Vec<Join> = _member
                 .joined
                 .into_iter()
                 .map(|j| {
+                    // If the group identifier matches, remove the role
                     if j.group_identifier == group_identifier {
                         let roles: Vec<String> =
                             j.roles.into_iter().filter(|r| r != &role).collect();
@@ -278,12 +321,14 @@ impl Store {
                             updated_at: time(),
                             created_at: time(),
                         }
+                        // If the group identifier does not match, return the original join
                     } else {
                         j
                     }
                 })
                 .collect();
 
+            // Update the member
             _member.joined = joined;
             let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
             Ok(())
@@ -292,32 +337,39 @@ impl Store {
         }
     }
 
+    // Method to remove a join from a member
     pub fn remove_join_from_member(
         caller: Principal,
         member_principal: Principal,
         group_identifier: Principal,
     ) -> Result<(), ApiError> {
+        // Get the existing member
         if let Some((_, _member)) = Self::_get_member_from_caller(caller) {
             if _member.joined.iter().any(|j| {
+                // Check if the member is an owner of the group
                 j.group_identifier == group_identifier && j.roles.contains(&"owner".to_string())
             }) {
+                // Get the member to remove the join from
                 match Self::_get_member_from_caller(member_principal) {
                     None => Err(Self::_member_not_found_error(
                         "remove_join_from_member",
                         None,
                     )),
                     Some((_identifier, mut _member)) => {
+                        // Filter out the group identifier from the joined array
                         let joined: Vec<Join> = _member
                             .joined
                             .into_iter()
                             .filter(|j| &j.group_identifier != &group_identifier)
                             .collect();
 
+                        // Update the joined array
                         _member.joined = joined;
                         let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                         return Ok(Self::update_member_count_on_group(&group_identifier));
                     }
                 }
+                // If the member is not an owner, throw an error
             } else {
                 return Err(api_error(
                     ApiErrorType::BadRequest,
@@ -328,6 +380,7 @@ impl Store {
                     None,
                 ));
             }
+            // If the member does not exist, throw an error
         } else {
             Err(Self::_member_not_found_error(
                 "remove_join_from_member",
@@ -336,23 +389,27 @@ impl Store {
         }
     }
 
+    // Method to remove an invite from a member
     pub fn remove_invite_from_member(
         caller: Principal,
         group_identifier: Principal,
     ) -> Result<(), ApiError> {
-        let existing = Self::_get_member_from_caller(caller);
-        match existing {
+        // Get the existing member
+        match Self::_get_member_from_caller(caller) {
+            // If the member does not exist, throw an error
             None => Err(Self::_member_not_found_error(
                 "remove_invite_from_member",
                 None,
             )),
+            // If the member exists, remove the invite
             Some((_identifier, mut _member)) => {
+                // Filter out the group identifier from the invites array
                 let invites: Vec<Invite> = _member
                     .invites
                     .into_iter()
                     .filter(|j| &j.group_identifier != &group_identifier)
                     .collect();
-
+                // Update the invites array
                 _member.invites = invites;
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(())
@@ -360,13 +417,16 @@ impl Store {
         }
     }
 
+    // Method to add a join or invite to a member
     async fn add_invite_or_join_group_to_member(
         caller: Principal,
         group_identifier: Principal,
         member: Option<(Principal, Member)>,
         group_privacy: Privacy,
+        // is used for NFT gated groups
         account_identifier: Option<String>,
     ) -> Result<Member, ApiError> {
+        // Create a join entry based on the group privacy settings and set the default role
         let join = Join {
             group_identifier: group_identifier.clone(),
             roles: vec!["member".to_string()],
@@ -374,6 +434,7 @@ impl Store {
             created_at: time(),
         };
 
+        // Create an invite entry based on the group privacy settings
         let invite = Invite {
             group_identifier,
             invite_type: InviteType::UserRequest,
@@ -383,39 +444,37 @@ impl Store {
 
         use Privacy::*;
         match group_privacy {
-            // Create a joined entry based on the group privacy settings
+            // If the group is public, add the member to the group
             Public => match member {
+                // If the member does not exist, create a new member
                 None => Ok(Member {
                     principal: caller,
                     profile_identifier: Principal::anonymous(),
                     joined: vec![join],
                     invites: vec![],
                 }),
+                // If the member exists, add the join to the member
                 Some((_, mut _member)) => {
                     _member.joined.push(join);
                     Ok(_member)
                 }
             },
-            // Create a invite entry based on the group privacy settings
+            // If the group is private, add the invite to the member
             Private => match member {
+                // If the member does not exist, create a new member
                 None => Ok(Member {
                     principal: caller,
                     profile_identifier: Principal::anonymous(),
                     joined: vec![],
                     invites: vec![invite],
                 }),
-                Some((_, _member)) => {
-                    let mut invites = _member.invites;
-                    invites.push(invite);
-                    Ok(Member {
-                        principal: _member.principal,
-                        profile_identifier: _member.profile_identifier,
-                        joined: _member.joined,
-                        invites,
-                    })
+                // If the member exists, add the invite to the member
+                Some((_, mut _member)) => {
+                    _member.invites.push(invite);
+                    Ok(_member)
                 }
             },
-            // This method needs a different call to split the logic
+            // If the group is invite only, throw an error
             InviteOnly => {
                 return Err(api_error(
                     ApiErrorType::BadRequest,
@@ -426,8 +485,10 @@ impl Store {
                     None,
                 ))
             }
+            // If the group is gated, check if the caller owns a specific NFT
             Gated(nft_canisters) => {
                 let mut is_valid = false;
+                // Loop over the canisters and check if the caller owns a specific NFT (inter-canister call)
                 for nft_canister in nft_canisters {
                     is_valid =
                         Self::validate_gated(caller, account_identifier.clone(), nft_canister)
@@ -444,17 +505,12 @@ impl Store {
                             joined: vec![join],
                             invites: vec![],
                         }),
-                        Some((_, _member)) => {
-                            let mut joined = _member.joined;
-                            joined.push(join);
-                            Ok(Member {
-                                principal: _member.principal,
-                                profile_identifier: _member.profile_identifier,
-                                joined,
-                                invites: _member.invites,
-                            })
+                        Some((_, mut _member)) => {
+                            _member.joined.push(join);
+                            Ok(_member)
                         }
                     }
+                    // If the caller does not own the NFT, throw an error
                 } else {
                     return Err(api_error(
                         ApiErrorType::Unauthorized,
@@ -469,12 +525,16 @@ impl Store {
         }
     }
 
+    // Method to check if the caller owns a specific NFT
     pub async fn validate_gated(
         principal: Principal,
         account_identifier: Option<String>,
         nft_canister: Gated,
     ) -> bool {
+        // Check if the canister is a EXT, DIP20 or DIP721 canister
         match nft_canister.standard.as_str() {
+            // If the canister is a EXT canister, check if the caller owns the NFT
+            // This call uses the account_identifier
             "EXT" => match account_identifier {
                 Some(_account_identifier) => {
                     let response =
@@ -483,14 +543,17 @@ impl Store {
                 }
                 None => false,
             },
+            // If the canister is a DIP20 canister, check if the caller owns the NFT
             "DIP20" => {
                 let response = dip20_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
             }
+            // If the canister is a DIP721 canister, check if the caller owns the NFT
             "DIP721" => {
-                let response = dip20_balance_of(nft_canister.principal, principal).await;
+                let response = dip721_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
             }
+            // If the canister is a LEGACY DIP721 canister, check if the caller owns the NFT
             "DIP721_LEGACY" => {
                 let response = legacy_dip721_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
@@ -499,7 +562,9 @@ impl Store {
         }
     }
 
+    // Method to get the member entry from the caller
     pub fn get_self(caller: Principal) -> Result<(Principal, Member), ApiError> {
+        // Get the member entry from the caller
         let existing = Self::_get_member_from_caller(caller);
         match existing {
             None => Err(Self::_member_not_found_error("get_self", None)),
@@ -507,13 +572,16 @@ impl Store {
         }
     }
 
+    // Method to get the roles assigned to the member in a specific group
     pub fn get_member_roles(
         member_identifier: Principal,
         group_identifier: Principal,
     ) -> Result<(Principal, Vec<String>), String> {
+        // Get the member entry from the member identifier
         let member = DATA.with(|data| Data::get_entry(data, member_identifier));
 
         match member {
+            // If the member exists, return the roles
             Ok((_member_identifier, _member)) => {
                 if let Some(_join) = _member
                     .joined
@@ -521,21 +589,26 @@ impl Store {
                     .find(|j| j.group_identifier == group_identifier)
                 {
                     Ok((_member.principal, _join.roles.clone()))
+                // If the member does not exist in the group, return an empty array
                 } else {
                     Ok((_member.principal, vec![]))
                 }
             }
+            // If the member does not exist, throw an error
             Err(_) => Err("No member found".to_string()),
         }
     }
 
+    // Method to get the roles assigned to the caller principal in a specific group
     pub fn get_member_roles_by_principal(
         principal: Principal,
         group_identifier: Principal,
     ) -> Result<(Principal, Vec<String>), String> {
+        // Get the member entry from the caller principal
         let member = Self::_get_member_from_caller(principal);
 
         match member {
+            // If the member exists, return the roles
             Some((_member_identifier, _member)) => {
                 if let Some(_join) = _member
                     .joined
@@ -543,90 +616,30 @@ impl Store {
                     .find(|j| j.group_identifier == group_identifier)
                 {
                     Ok((_member.principal, _join.roles.clone()))
+                // If the member does not exist in the group, return an empty array
                 } else {
                     Ok((_member.principal, vec![]))
                 }
             }
+            // If the member does not exist, throw an error
             None => Err("No member found".to_string()),
         }
     }
-
-    // pub async fn has_role(
-    //     caller: Principal,
-    //     group_identifier: Principal,
-    //     permission_name: String,
-    //     permission: PermissionActionType,
-    // ) -> Result<bool, String> {
-    //     if has_default_role(&permission_name, &permission) {
-    //         return Ok(true);
-    //     }
-
-    //     // destructure the group identifier and check the kind
-    //     let (_, _group_canister, _kind) = Identifier::decode(&group_identifier);
-
-    //     //throw error if its the wrong kind
-    //     if _kind != "grp".to_string() {
-    //         return Err("Wrong principal kind".to_string());
-    //     };
-
-    //     // get the existing member
-    //     match Self::_get_member_from_caller(caller) {
-    //         Some((_existing_principal, _existing_member)) => {
-    //             let joined = _existing_member
-    //                 .joined
-    //                 .iter()
-    //                 .find(|j| j.group_identifier == group_identifier);
-
-    //             match joined {
-    //                 Some(_existing_joined) => {
-    //                     // do inter-canister call to fetch the roles of the group
-    //                     let group_roles: Result<(Vec<GroupRole>,), _> =
-    //                         call::call(_group_canister, "get_roles", (group_identifier,)).await;
-
-    //                     let mut member_role_with_permissions: Vec<GroupRole> = vec![];
-
-    //                     // iterate over the roles assigned to the member
-    //                     if let Ok(_group_role) = group_roles {
-    //                         for role in _existing_joined.roles.iter() {
-    //                             if let Some(_found_role) =
-    //                                 _group_role.0.iter().find(|r| &r.name == role)
-    //                             {
-    //                                 member_role_with_permissions.push(_found_role.clone());
-    //                             }
-    //                         }
-    //                     }
-    //                     use PermissionActionType::*;
-    //                     let result = member_role_with_permissions.iter().any(|v| {
-    //                         v.permissions.iter().any(|p| {
-    //                             p.name == permission_name
-    //                                 && match permission {
-    //                                     Write => p.actions.write == true,
-    //                                     Read => p.actions.read == true,
-    //                                     Edit => p.actions.edit == true,
-    //                                     Delete => p.actions.delete == true,
-    //                                 }
-    //                         })
-    //                     });
-    //                     Ok(result)
-    //                 }
-    //                 None => Err("User not part of this group".to_string()),
-    //             }
-    //         }
-    //         None => Err("No member found".to_string()),
-    //     }
-    // }
 
     pub fn get_group_member_by_user_principal(
         caller: Principal,
         group_identifier: Principal,
     ) -> Result<JoinedMemberResponse, ApiError> {
         DATA.with(|data| {
+            // Get the member entry from the caller principal
             let member = Store::_get_member_from_caller(caller);
             match member {
+                // If the member does not exist, throw an error
                 None => Err(Self::_member_not_found_error(
                     "get_group_member_by_user_principal",
                     None,
                 )),
+                // If the member exists, continue
                 Some((_identifier, _member)) => {
                     let join = _member
                         .joined
@@ -634,6 +647,7 @@ impl Store {
                         .find(|j| &j.group_identifier == &group_identifier);
 
                     match join {
+                        // If the member does not exist in the group, return an error
                         None => Err(api_error(
                             ApiErrorType::NotFound,
                             "NOT_JOINED",
@@ -642,6 +656,7 @@ impl Store {
                             "get_group_member_by_user_principal",
                             None,
                         )),
+                        // If the member exists in the group, return the joined member response
                         Some(_join) => Ok(JoinedMemberResponse {
                             group_identifier: group_identifier,
                             member_identifier: _identifier,
@@ -654,10 +669,12 @@ impl Store {
         })
     }
 
+    // Method to get the members of the group
     pub fn get_group_members(group_identifier: Principal) -> Vec<JoinedMemberResponse> {
+        // Get all members
         DATA.with(|data| {
             let members = Data::get_entries(data);
-
+            // Filter the members that are in the group
             members
                 .iter()
                 .filter(|(_identifier, _member)| {
@@ -677,12 +694,16 @@ impl Store {
         })
     }
 
+    // Method to get the total member in a specific range of groups
     pub fn get_group_members_count(group_identifiers: Vec<Principal>) -> Vec<(Principal, usize)> {
+        // Initialize the members count array
         let mut members_counts: Vec<(Principal, usize)> = vec![];
 
         DATA.with(|data| {
+            // Get all members
             let members = Data::get_entries(data);
 
+            // For each group, count the members that are in the group
             for group_identifier in group_identifiers {
                 let count = members
                     .iter()
@@ -693,6 +714,7 @@ impl Store {
                             .any(|j| &j.group_identifier == &group_identifier)
                     })
                     .count();
+                // Push the group identifier and the count to the members count array
                 members_counts.push((group_identifier, count));
             }
         });
@@ -700,32 +722,44 @@ impl Store {
         members_counts
     }
 
+    // Method to get the groups that the member is in
     pub fn get_groups_for_members(
         member_identifier: Vec<Principal>,
     ) -> Vec<(Principal, Vec<Principal>)> {
+        // Initialize an empty members with groups array
         let mut members_with_groups: Vec<(Principal, Vec<Principal>)> = vec![];
 
+        // For each member, get the groups that the member is in
         for _member_identifier in member_identifier {
+            // Initialize an empty groups array
             let mut groups: Vec<Principal> = vec![];
+            // Get the member entry
             let member = DATA.with(|data| Data::get_entry(data, _member_identifier));
 
+            // If the member exists, get the groups that the member is in
             if let Ok((_, _member)) = member {
                 for joined in _member.joined.iter() {
+                    // Push the group identifier to the groups array
                     groups.push(joined.group_identifier.clone());
                 }
             }
+            // Push the member identifier and the groups array to the members with groups array
             members_with_groups.push((_member_identifier, groups));
         }
 
         members_with_groups
     }
 
+    // Method to get the total invites in a specific range of groups
     pub fn get_group_invites_count(group_identifiers: Vec<Principal>) -> Vec<(Principal, usize)> {
+        // Initialize the invite count array
         let mut members_counts: Vec<(Principal, usize)> = vec![];
 
         DATA.with(|data| {
+            // Get all members
             let members = Data::get_entries(data);
 
+            // For each group, count the invites that are in the group
             for group_identifier in group_identifiers {
                 let count = members
                     .iter()
@@ -736,6 +770,7 @@ impl Store {
                             .any(|j| &j.group_identifier == &group_identifier)
                     })
                     .count();
+                // Push the group identifier and the count to the invite count array
                 members_counts.push((group_identifier, count));
             }
         });
@@ -743,10 +778,13 @@ impl Store {
         members_counts
     }
 
+    // Method to get the invites of the group
     pub fn get_group_invites(group_identifier: Principal) -> Vec<InviteMemberResponse> {
         DATA.with(|data| {
+            // Get all members
             let members = Data::get_entries(data);
 
+            // Filter the members invites that are in the group
             members
                 .iter()
                 .filter(|(_identifier, _member)| {
@@ -766,7 +804,7 @@ impl Store {
         })
     }
 
-    // fire this after storing the owner
+    // Method that is called when a group is created
     pub async fn add_owner(
         owner_principal: Principal,
         group_identifier: Principal,
@@ -780,6 +818,7 @@ impl Store {
                 // if the call fails return an error
                 Err(err) => Err(err),
                 Ok((_group_owner, _group_privacy)) => {
+                    // Check if the caller is the owner of the group
                     if _group_owner != owner_principal {
                         return Err(api_error(
                             ApiErrorType::BadRequest,
@@ -832,6 +871,7 @@ impl Store {
                                 ));
                             }
 
+                            // Add the group identifier to the joined array
                             _member.joined.push(Join {
                                 group_identifier,
                                 roles: vec!["owner".to_string()],
@@ -851,81 +891,68 @@ impl Store {
         })
     }
 
+    // Method to invite a member to a group
     pub fn invite_to_group(
-        caller: Principal,
         group_identifier: Principal,
         member_principal: Principal,
     ) -> Result<(Principal, Member), ApiError> {
         DATA.with(|data| {
-            let group_owner = Self::get_group_owner(&group_identifier);
-            match group_owner {
-                None => Err(api_error(
-                    ApiErrorType::Unauthorized,
-                    "NO_OWNER",
-                    "You are not allowed to invite people to the group",
-                    Data::get_name(data).as_str(),
-                    "invite_to_group",
-                    None,
-                )),
-                Some((_identifier, _owner)) => {
-                    if _owner.principal != caller {
-                        return Err(api_error(
-                            ApiErrorType::Unauthorized,
-                            "INVITE_BLOCKED",
-                            "You are not allowed to invite people to the group",
-                            Data::get_name(data).as_str(),
-                            "invite_to_group",
-                            None,
-                        ));
-                    }
+            // Get the existing member
+            let existing_member = Self::_get_member_from_caller(member_principal);
 
-                    let existing_member = Self::_get_member_from_caller(member_principal);
+            // Create the invite
+            let invite = Invite {
+                group_identifier,
+                // Set the invite type to owner request
+                invite_type: InviteType::OwnerRequest,
+                updated_at: time(),
+                created_at: time(),
+            };
 
-                    let invite = Invite {
-                        group_identifier,
-                        invite_type: InviteType::OwnerRequest,
-                        updated_at: time(),
-                        created_at: time(),
+            match existing_member {
+                None => {
+                    // If there is no existing member, create a new member
+                    let member = Member {
+                        principal: member_principal,
+                        profile_identifier: Principal::anonymous(),
+                        joined: vec![],
+                        invites: vec![invite],
                     };
-
-                    match existing_member {
-                        None => {
-                            let member = Member {
-                                principal: member_principal,
-                                profile_identifier: Principal::anonymous(),
-                                joined: vec![],
-                                invites: vec![invite],
-                            };
-                            Data::add_entry(data, member, Some("mbr".to_string()))
-                        }
-                        Some((_identifier, mut _member)) => {
-                            _member.invites.push(invite);
-                            Data::update_entry(data, _identifier, _member)
-                        }
-                    }
+                    // Add the member to the members array
+                    Data::add_entry(data, member, Some("mbr".to_string()))
+                }
+                Some((_identifier, mut _member)) => {
+                    // If there is an existing member, add the invite to the invites array
+                    _member.invites.push(invite);
+                    // Update the member
+                    Data::update_entry(data, _identifier, _member)
                 }
             }
         })
     }
 
+    // Method to accept a user request to join a group
     pub fn accept_user_request_group_invite(
         member_principal: Principal,
         group_identifier: Principal,
     ) -> Result<(Principal, Member), ApiError> {
-        let member = Self::_get_member_from_caller(member_principal);
-
-        match member {
+        // Get the existing member
+        match Self::_get_member_from_caller(member_principal) {
+            // If there is no member, throw an error
             None => Err(Self::_member_not_found_error(
                 "remove_invite_from_member",
                 None,
             )),
+            // If there is a member, continue
             Some((_identifier, mut _member)) => {
+                // Find the invite in the invites array
                 let invite = _member
                     .invites
                     .iter()
                     .find(|i| &i.group_identifier == &group_identifier);
 
                 match invite {
+                    // If there is no invite, throw an error
                     None => Err(api_error(
                         ApiErrorType::NotFound,
                         "NO_INVITE_FOUND",
@@ -934,7 +961,9 @@ impl Store {
                         "accept_user_request_group_invite",
                         None,
                     )),
+                    // If there is an invite, continue
                     Some(_invite) => {
+                        // Check if the invite type is user request
                         if _invite.invite_type != InviteType::UserRequest {
                             return Err(api_error(
                                 ApiErrorType::BadRequest,
@@ -946,20 +975,26 @@ impl Store {
                             ));
                         }
 
+                        // Remove the invite from the invites array
                         _member.invites = _member
                             .invites
                             .into_iter()
                             .filter(|i| &i.group_identifier != &group_identifier)
                             .collect();
 
+                        // Add a new Join to the joined array
                         _member.joined.push(Join {
                             group_identifier,
                             roles: vec!["member".to_string()],
                             updated_at: time(),
                             created_at: time(),
                         });
+
+                        // Update the member
                         let result =
                             DATA.with(|data| Data::update_entry(data, _identifier, _member));
+
+                        // Update the member count on the group canister (inter-canister call)
                         Self::update_member_count_on_group(&group_identifier);
                         result
                     }
@@ -968,24 +1003,29 @@ impl Store {
         }
     }
 
+    // Method to accept an owner request to join a group
     pub fn accept_owner_request_group_invite(
         caller: Principal,
         group_identifier: Principal,
     ) -> Result<(Principal, Member), ApiError> {
         DATA.with(|data| {
-            let existing_member = Self::_get_member_from_caller(caller);
-
-            match existing_member {
+            // Get the existing member
+            match Self::_get_member_from_caller(caller) {
+                // If there is no member, throw an error
                 None => Err(Self::_member_not_found_error(
                     "remove_invite_from_member",
                     None,
                 )),
+                // If there is a member, continue
                 Some((_identifier, mut _member)) => {
+                    // Find the invite in the invites array
                     let invite = _member
                         .invites
                         .iter()
                         .find(|i| &i.group_identifier == &group_identifier);
+
                     match invite {
+                        // If there is no invite, throw an error
                         None => Err(api_error(
                             ApiErrorType::NotFound,
                             "NO_INVITE_FOUND",
@@ -994,7 +1034,9 @@ impl Store {
                             "accept_owner_request_group_invite",
                             None,
                         )),
+                        // If there is an invite, continue
                         Some(_invite) => {
+                            // Check if the invite type is owner request
                             if _invite.invite_type != InviteType::OwnerRequest {
                                 return Err(api_error(
                                     ApiErrorType::BadRequest,
@@ -1006,6 +1048,7 @@ impl Store {
                                 ));
                             }
 
+                            // Remove the invite from the invites array
                             _member.invites = _member
                                 .invites
                                 .iter()
@@ -1013,13 +1056,17 @@ impl Store {
                                 .cloned()
                                 .collect();
 
+                            // Add a new Join to the joined array
                             _member.joined.push(Join {
                                 group_identifier,
                                 roles: vec!["member".to_string()],
                                 updated_at: time(),
                                 created_at: time(),
                             });
+                            // Update the member
                             let result = Data::update_entry(data, _identifier, _member);
+
+                            // Update the member count on the group canister (inter-canister call)
                             Self::update_member_count_on_group(&group_identifier);
                             result
                         }
@@ -1029,6 +1076,7 @@ impl Store {
         })
     }
 
+    // Method to get the group owner and privacy from the group canister (inter-canister call)
     async fn get_group_owner_and_privacy(
         group_identifier: Principal,
     ) -> Result<(Principal, Privacy), ApiError> {
@@ -1056,20 +1104,7 @@ impl Store {
         })
     }
 
-    fn get_group_owner(group_identifier: &Principal) -> Option<(Principal, Member)> {
-        DATA.with(|data| {
-            let members = Data::get_entries(data);
-            let existing_member = members.into_iter().find(|(_identifier, _member)| {
-                _member.joined.iter().any(|j| {
-                    j.roles.contains(&"owner".to_string())
-                        && &j.group_identifier == group_identifier
-                })
-            });
-
-            existing_member
-        })
-    }
-
+    // Method to map a member to a joined member response
     fn map_member_to_joined_member_response(
         identifier: &Principal,
         member: &Member,
@@ -1094,6 +1129,7 @@ impl Store {
         }
     }
 
+    // Method to map a member to an invite member response
     fn map_member_to_invite_member_response(
         identifier: &Principal,
         member: &Member,
@@ -1112,6 +1148,7 @@ impl Store {
         }
     }
 
+    // Method to get a member by caller principal
     fn _get_member_from_caller(caller: Principal) -> Option<(Principal, Member)> {
         let members = DATA.with(|data| Data::get_entries(data));
         members
@@ -1119,6 +1156,7 @@ impl Store {
             .find(|(_identifier, _member)| _member.principal == caller)
     }
 
+    // Method to get the member count for a specific group
     fn _get_member_count_for_group(group_identifier: &Principal) -> usize {
         let members = DATA.with(|data| Data::get_entries(data));
         members
@@ -1132,6 +1170,7 @@ impl Store {
             .count()
     }
 
+    // Default not found error
     fn _member_not_found_error(method_name: &str, inputs: Option<Vec<String>>) -> ApiError {
         api_error(
             ApiErrorType::NotFound,
@@ -1143,17 +1182,22 @@ impl Store {
         )
     }
 
+    // [fire and forget]
+    // Method to update the member count on the group canister (inter-canister call)
     #[allow(unused_must_use)]
     fn update_member_count_on_group(group_identifier: &Principal) -> () {
+        // Get the member count for the group
         let group_member_count_array =
             Self::get_group_members_count(vec![group_identifier.clone()]);
         let mut count = 0;
 
+        // If the group has members, set the count to the length of the array
         if group_member_count_array.len() > 0 {
             count = group_member_count_array[0].1;
         };
 
         let (_, group_canister, _) = Identifier::decode(group_identifier);
+        // Call the update_member_count method on the group canister and send the total amount of members of the group with it
         call::call::<(Principal, Principal, usize), ()>(
             group_canister,
             "update_member_count",
@@ -1161,6 +1205,7 @@ impl Store {
         );
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_write_member(
         caller: Principal,
         group_identifier: Principal,
@@ -1174,6 +1219,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_read_member(
         caller: Principal,
         group_identifier: Principal,
@@ -1187,6 +1233,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_edit_member(
         caller: Principal,
         group_identifier: Principal,
@@ -1200,6 +1247,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_delete_member(
         caller: Principal,
         group_identifier: Principal,
@@ -1213,6 +1261,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_write_invite(
         caller: Principal,
         group_identifier: Principal,
@@ -1226,6 +1275,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_read_invite(
         caller: Principal,
         group_identifier: Principal,
@@ -1239,6 +1289,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_edit_invite(
         caller: Principal,
         group_identifier: Principal,
@@ -1252,6 +1303,7 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     pub async fn can_delete_invite(
         caller: Principal,
         group_identifier: Principal,
@@ -1265,17 +1317,22 @@ impl Store {
         .await
     }
 
+    // Method to check if a member has a specific permission
     async fn check_permission(
         caller: Principal,
         group_identifier: Principal,
         permission: PermissionActionType,
         permission_type: PermissionType,
     ) -> Result<Principal, ApiError> {
+        // Get the roles of the group (inter-canister call)
         let group_roles = get_group_roles(group_identifier).await;
+        // Get the roles of the member
         let member_roles = Self::get_member_roles_by_principal(caller, group_identifier);
 
         match member_roles {
+            // If the member has roles
             Ok((_principal, _roles)) => {
+                // Check if the caller is the principal of the member, if not, return an unauthorized error
                 if caller != _principal {
                     return Err(api_error(
                         ApiErrorType::Unauthorized,
@@ -1288,11 +1345,13 @@ impl Store {
                 }
 
                 match group_roles {
+                    // If the group has roles, check if the member has the permission
                     Ok(mut _group_roles) => {
                         _group_roles.append(&mut default_roles());
                         let has_permission =
                             has_permission(&_roles, &permission_type, &_group_roles, &permission);
 
+                        // If the member doesn't have the permission, return an unauthorized error
                         if !has_permission {
                             return Err(api_error(
                                 ApiErrorType::Unauthorized,
@@ -1303,9 +1362,10 @@ impl Store {
                                 None,
                             ));
                         }
-
+                        // If the member has the permission, return the principal
                         Ok(caller)
                     }
+                    // If the group doesn't have roles, return an unauthorized error
                     Err(err) => Err(api_error(
                         ApiErrorType::Unauthorized,
                         "NO_PERMISSION",
@@ -1316,6 +1376,7 @@ impl Store {
                     )),
                 }
             }
+            // If the member doesn't have roles, return an unauthorized error
             Err(err) => Err(api_error(
                 ApiErrorType::Unauthorized,
                 "NO_PERMISSION",
@@ -1324,6 +1385,128 @@ impl Store {
                 "check_permission",
                 None,
             )),
+        }
+    }
+
+    // Used for composite_query calls from the parent canister
+    //
+    // Method to get filtered members serialized and chunked
+    pub fn get_chunked_join_data(
+        group_identifier: &Principal,
+        chunk: usize,
+        max_bytes_per_chunk: usize,
+    ) -> (Vec<u8>, (usize, usize)) {
+        let members = DATA.with(|data| Data::get_entries(data));
+        // Get members for filtering
+        let mapped_members: Vec<JoinedMemberResponse> = members
+            .iter()
+            // Filter members that have joined the group
+            .filter(|(_identifier, _member_data)| {
+                _member_data
+                    .joined
+                    .iter()
+                    .any(|j| &j.group_identifier == group_identifier)
+            })
+            // Map member to joined member response
+            .map(|(_identifier, _group_data)| {
+                Self::map_member_to_joined_member_response(
+                    _identifier,
+                    _group_data,
+                    group_identifier.clone(),
+                )
+            })
+            .collect();
+
+        if let Ok(bytes) = serialize(&mapped_members) {
+            // Check if the bytes of the serialized groups are greater than the max bytes per chunk specified as an argument
+            if bytes.len() >= max_bytes_per_chunk {
+                // Get the start and end index of the bytes to be returned
+                let start = chunk * max_bytes_per_chunk;
+                let end = (chunk + 1) * (max_bytes_per_chunk);
+
+                // Get the bytes to be returned, if the end index is greater than the length of the bytes, return the remaining bytes
+                let response = if end >= bytes.len() {
+                    bytes[start..].to_vec()
+                } else {
+                    bytes[start..end].to_vec()
+                };
+
+                // Determine the max number of chunks that can be returned, a float is used because the number of chunks can be a decimal in this step
+                let mut max_chunks: f64 = 0.00;
+                if max_bytes_per_chunk < bytes.len() {
+                    max_chunks = (bytes.len() / max_bytes_per_chunk) as f64;
+                }
+
+                // return the response and start and end chunk index, the end chunk index is calculated by rounding up the max chunks
+                return (response, (chunk, max_chunks.ceil() as usize));
+            }
+
+            // if the bytes of the serialized groups are less than the max bytes per chunk specified as an argument, return the bytes and start and end chunk index as 0
+            return (bytes, (0, 0));
+        } else {
+            // if the groups cant be serialized return an empty vec and start and end chunk index as 0
+            return (vec![], (0, 0));
+        }
+    }
+
+    // Used for composite_query calls from the parent canister
+    //
+    // Method to get filtered members serialized and chunked
+    pub fn get_chunked_invite_data(
+        group_identifier: &Principal,
+        chunk: usize,
+        max_bytes_per_chunk: usize,
+    ) -> (Vec<u8>, (usize, usize)) {
+        let members = DATA.with(|data| Data::get_entries(data));
+        // Get members for filtering
+        let mapped_members: Vec<InviteMemberResponse> = members
+            .iter()
+            // Filter members that have joined the group
+            .filter(|(_identifier, _member_data)| {
+                _member_data
+                    .invites
+                    .iter()
+                    .any(|j| &j.group_identifier == group_identifier)
+            })
+            // Map member to joined member response
+            .map(|(_identifier, _group_data)| {
+                Self::map_member_to_invite_member_response(
+                    _identifier,
+                    _group_data,
+                    group_identifier.clone(),
+                )
+            })
+            .collect();
+
+        if let Ok(bytes) = serialize(&mapped_members) {
+            // Check if the bytes of the serialized groups are greater than the max bytes per chunk specified as an argument
+            if bytes.len() >= max_bytes_per_chunk {
+                // Get the start and end index of the bytes to be returned
+                let start = chunk * max_bytes_per_chunk;
+                let end = (chunk + 1) * (max_bytes_per_chunk);
+
+                // Get the bytes to be returned, if the end index is greater than the length of the bytes, return the remaining bytes
+                let response = if end >= bytes.len() {
+                    bytes[start..].to_vec()
+                } else {
+                    bytes[start..end].to_vec()
+                };
+
+                // Determine the max number of chunks that can be returned, a float is used because the number of chunks can be a decimal in this step
+                let mut max_chunks: f64 = 0.00;
+                if max_bytes_per_chunk < bytes.len() {
+                    max_chunks = (bytes.len() / max_bytes_per_chunk) as f64;
+                }
+
+                // return the response and start and end chunk index, the end chunk index is calculated by rounding up the max chunks
+                return (response, (chunk, max_chunks.ceil() as usize));
+            }
+
+            // if the bytes of the serialized groups are less than the max bytes per chunk specified as an argument, return the bytes and start and end chunk index as 0
+            return (bytes, (0, 0));
+        } else {
+            // if the groups cant be serialized return an empty vec and start and end chunk index as 0
+            return (vec![], (0, 0));
         }
     }
 }

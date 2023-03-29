@@ -15,12 +15,15 @@ use ic_scalable_misc::{
     helpers::{
         canister_helper::{Canister, CanisterID, CanisterSettings, InstallCodeMode},
         error_helper::api_error,
+        paging_helper::get_paged_data,
+        serialize_helper::deserialize,
     },
     models::{
-        canister_models::ScalableCanisterDetails, wasm_models::WasmDetails,
-        whitelist_models::WhitelistEntry,
+        canister_models::ScalableCanisterDetails, paged_response_models::PagedResponse,
+        wasm_models::WasmDetails,
     },
 };
+use shared::member_model::{InviteMemberResponse, JoinedMemberResponse};
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct ScalableMetaData {
@@ -41,14 +44,10 @@ pub struct ScalableData {
     pub name: String,
     // The child canisters that are used for storing the scalable data
     pub canisters: HashMap<Principal, ScalableCanisterDetails>,
-    // The wasm details that need to be installed on the child canisters
-    pub owner: Principal,
     // The parent canister
     pub parent: Principal,
     // The wasm details that need to be installed on the child canisters
     pub child_wasm_data: WasmDetails,
-    // whitelist for administrative access, the foundation an parent canister are added by default
-    pub whitelist: Vec<WhitelistEntry>,
     // updated_at record
     pub updated_at: u64,
     // created_at record
@@ -61,8 +60,6 @@ impl Default for ScalableData {
             canisters: HashMap::new(),
             name: String::default(),
             child_wasm_data: Default::default(),
-            whitelist: Vec::default(),
-            owner: Principal::anonymous(),
             parent: Principal::anonymous(),
             updated_at: time(),
             created_at: time(),
@@ -74,11 +71,13 @@ thread_local! {
     pub static DATA: RefCell<ScalableData> = RefCell::new(ScalableData::default());
 }
 impl ScalableData {
+    // Method to retrieve an available canister to write updates to
     pub fn get_available_canister(caller: Principal) -> Result<ScalableCanisterDetails, String> {
         let canister = DATA.with(|v| {
             v.borrow()
                 .canisters
                 .iter()
+                // filter out self in case this method is called by a child canister
                 .filter(|(_, c)| c.principal != caller)
                 .find(|(_, c)| c.is_available)
                 .map(|(_, details)| details.clone())
@@ -90,6 +89,7 @@ impl ScalableData {
         }
     }
 
+    // Methods to retrieve all the canisters
     pub fn get_canisters() -> Vec<ScalableCanisterDetails> {
         let canisters: Vec<ScalableCanisterDetails> = DATA.with(|v| {
             v.borrow()
@@ -101,23 +101,26 @@ impl ScalableData {
         return canisters;
     }
 
+    // Method used on the init function to spawn a child canister when the parent canister is installed
     pub async fn initialize_first_child_canister() -> () {
+        // check if the child wasm is present
         if DATA.with(|data| data.borrow().child_wasm_data.bytes.len()) == 0 {
             return;
         }
 
+        // check if there is already a child canister
         if DATA.with(|v| v.borrow().canisters.len() != 0) {
             return;
         }
 
-        let new_canister = Self::spawn_empty_canister(id()).await;
+        // spawn empty canister
+        let new_canister = Self::spawn_empty_canister().await;
         let _ = match new_canister {
             Err(err) => Err(err),
             Ok(new_canister_principal) => {
+                // Install child canister
                 let installed_canister = Self::_install_child_canister(
-                    id(),
                     Self::get_name(),
-                    id(),
                     new_canister_principal,
                     InstallCodeMode::Install,
                 )
@@ -130,23 +133,15 @@ impl ScalableData {
         };
     }
 
+    // Method used called by child canister once full (inter-canister call)
     pub async fn close_child_canister_and_spawn_sibling(
         caller: Principal,
-        owner: Principal,
         last_entry_id: u64,
         entry: Vec<u8>,
-        principal_entry_reference: Option<Principal>,
     ) -> Result<Principal, ApiError> {
-        let inputs = Some(vec![
-            format!("caller - {}", &caller.to_string()),
-            format!("owner - {}", &owner.to_string()),
-            format!("last_entry_id - {:?}", &last_entry_id),
-            format!(
-                "principal_entry_reference - {:?}",
-                &principal_entry_reference
-            ),
-        ]);
+        let inputs = Some(vec![format!("last_entry_id - {:?}", &last_entry_id)]);
 
+        // check if the child wasm is present
         if DATA.with(|v| v.borrow().child_wasm_data.bytes.len() == 0) {
             return Err(api_error(
                 ApiErrorType::BadRequest,
@@ -158,22 +153,7 @@ impl ScalableData {
             ));
         }
 
-        if !DATA.with(|v| {
-            v.borrow()
-                .canisters
-                .iter()
-                .any(|(principal, _)| principal == &caller)
-        }) {
-            return Err(api_error(
-                ApiErrorType::BadRequest,
-                "UNKNOWN_CANISTER",
-                "The caller principal isnt known to this canister",
-                &Self::get_name(),
-                "close_child_canister_and_spawn_sibling",
-                inputs,
-            ));
-        }
-
+        // check if the caller is known to this canister
         let caller_canister = DATA.with(|v| v.borrow().canisters.get(&caller).cloned());
         match caller_canister {
             None => Err(api_error(
@@ -184,15 +164,15 @@ impl ScalableData {
                 "close_child_canister_and_spawn_sibling",
                 inputs,
             )),
-            Some(_caller_canister) => {
-                let new_canister = Self::spawn_empty_canister(caller).await;
+            Some(mut _caller_canister) => {
+                // spawn empty canister
+                let new_canister = Self::spawn_empty_canister().await;
                 match new_canister {
                     Err(err) => Err(err),
                     Ok(new_canister_principal) => {
+                        // Install child canister
                         let installed_canister = Self::_install_child_canister(
-                            caller,
                             Self::get_name(),
-                            owner,
                             new_canister_principal,
                             InstallCodeMode::Install,
                         )
@@ -200,24 +180,21 @@ impl ScalableData {
                         match installed_canister {
                             Err(err) => Err(err),
                             Ok(new_installed_canister_principal) => {
-                                let updated_canister = ScalableCanisterDetails {
-                                    principal: _caller_canister.principal.clone(),
-                                    canister_type: _caller_canister.canister_type.clone(),
-                                    wasm_version: _caller_canister.wasm_version.clone(),
-                                    is_available: false,
-                                    entry_range: (0, Some(last_entry_id)),
-                                };
+                                // update the caller canister
+                                _caller_canister.is_available = false;
+                                _caller_canister.entry_range = (0, Some(last_entry_id));
 
                                 DATA.with(|v| {
                                     v.borrow_mut()
                                         .canisters
-                                        .insert(_caller_canister.principal, updated_canister)
+                                        .insert(_caller_canister.principal, _caller_canister)
                                 });
 
+                                // send the entry to the new canister
                                 let call_result: Result<(Result<(), ApiError>,), _> = call::call(
                                     new_installed_canister_principal,
                                     "add_entry_by_parent",
-                                    (principal_entry_reference, entry),
+                                    (entry,),
                                 )
                                 .await;
 
@@ -240,6 +217,7 @@ impl ScalableData {
         }
     }
 
+    // Method used to upgrade the child canister
     pub async fn upgrade_child_canister(
         canister_principal: Principal,
     ) -> Result<ScalableCanisterDetails, ApiError> {
@@ -249,8 +227,7 @@ impl ScalableData {
         )]);
 
         let data = DATA.with(|v| v.borrow().clone());
-        let existing_child = data.canisters.get(&canister_principal);
-        match existing_child {
+        match data.canisters.get(&canister_principal).cloned() {
             None => Err(api_error(
                 ApiErrorType::NotFound,
                 "NO_CHILDREN",
@@ -259,8 +236,9 @@ impl ScalableData {
                 "upgrade_scalable_canister",
                 inputs,
             )),
-            Some(_child) => {
-                if data.child_wasm_data.wasm_version == _child.wasm_version {
+            Some(mut _child_canister) => {
+                // check if the version of the wasm is different then the new version
+                if &data.child_wasm_data.wasm_version == &_child_canister.wasm_version {
                     return Err(api_error(
                         ApiErrorType::BadRequest,
                         "CANISTER_UP_TO_DATE",
@@ -271,7 +249,8 @@ impl ScalableData {
                     ));
                 }
 
-                let canister = Canister::from(_child.principal);
+                let canister = Canister::from(_child_canister.principal);
+                // upgrade the child canister
                 let upgrade_result = canister
                     .install_code(
                         InstallCodeMode::Upgrade,
@@ -289,36 +268,32 @@ impl ScalableData {
                         inputs,
                     )),
                     Ok(_) => {
-                        let updated_child = ScalableCanisterDetails {
-                            principal: _child.principal,
-                            canister_type: _child.canister_type.clone(),
-                            wasm_version: data.child_wasm_data.wasm_version.clone(),
-                            is_available: _child.is_available,
-                            entry_range: _child.entry_range,
-                        };
+                        // update child wasm version
+                        _child_canister.wasm_version = data.child_wasm_data.wasm_version;
 
                         DATA.with(|v| {
                             v.borrow_mut()
                                 .canisters
-                                .insert(canister_principal, updated_child.clone())
+                                .insert(canister_principal, _child_canister.clone())
                         });
-                        Ok(updated_child)
+                        Ok(_child_canister)
                     }
                 }
             }
         }
     }
 
-    async fn spawn_empty_canister(caller: Principal) -> Result<Principal, ApiError> {
-        let inputs = Some(vec![format!("caller - {}", &caller.to_string())]);
-
+    // Method used to spawn an empty canister (not installed)
+    async fn spawn_empty_canister() -> Result<Principal, ApiError> {
+        // Set canister settings
         let canister_settings = CanisterSettings {
-            controllers: Some(vec![caller, id()]),
+            controllers: Some(vec![id()]),
             compute_allocation: None,
             memory_allocation: None,
             freezing_threshold: None,
         };
 
+        // Create canister with predefined amount of cycles
         let new_canister = Canister::create(Some(canister_settings), 2_000_000_000_000).await;
         match new_canister {
             Err(err) => Err(api_error(
@@ -327,7 +302,7 @@ impl ScalableData {
                 err.1.as_str(),
                 &Self::get_name(),
                 "_spawn_empty_canister",
-                inputs,
+                None,
             )),
             Ok(_canister) => {
                 let new_canister_principal = CanisterID::from(_canister);
@@ -339,6 +314,7 @@ impl ScalableData {
                     entry_range: (0, None),
                 };
 
+                // Store child canister data on the parent
                 DATA.with(|v| {
                     v.borrow_mut()
                         .canisters
@@ -349,17 +325,13 @@ impl ScalableData {
         }
     }
 
+    // Install the child canister
     async fn _install_child_canister(
-        caller: Principal,
         name: String,
-        owner: Principal,
         canister_principal: Principal,
         install_code_mode: InstallCodeMode,
     ) -> Result<Principal, ApiError> {
-        let inputs = Some(vec![
-            format!("caller - {}", &caller.to_string()),
-            format!("name - {}", &name.to_string()),
-        ]);
+        let inputs = Some(vec![format!("name - {}", &name.to_string())]);
 
         let data = DATA.with(|v| v.borrow().clone());
         if data.child_wasm_data.bytes.len() == 0 {
@@ -377,7 +349,7 @@ impl ScalableData {
             .install_code(
                 install_code_mode,
                 data.child_wasm_data.bytes,
-                (owner, id(), name, data.canisters.iter().len()),
+                (id(), name, data.canisters.iter().len()),
             )
             .await;
 
@@ -409,6 +381,7 @@ impl ScalableData {
         }
     }
 
+    // Method used to upgrade all the child canister
     pub async fn upgrade_children() {
         let data = DATA.with(|data| data.borrow().clone());
         for child in data.canisters {
@@ -420,13 +393,11 @@ impl ScalableData {
             }
         }
     }
-
     pub fn get_child_wasm_data(
         old_store: &ScalableData,
         version: u64,
     ) -> Result<WasmDetails, String> {
-        let bytes: Vec<u8> = vec![];
-        // let bytes = include_bytes!("../../../../wasm/demo_child_canister.wasm").to_vec();
+        let bytes = include_bytes!("../../../wasm/child.wasm").to_vec();
 
         if bytes.is_empty() {
             return Err("No WASM found, skipping child WASM update".to_string());
@@ -469,5 +440,181 @@ impl ScalableData {
 
     fn get_name() -> String {
         DATA.with(|v| v.borrow().name.clone())
+    }
+
+    //
+    // MEMBERS
+    //
+    // Method used to get all the members from the child canisters paged
+    // requires composite queries to be released to mainnet
+    pub async fn get_joined_child_canister_data(
+        group_identifier: Principal,
+        limit: usize,
+        page: usize,
+    ) -> PagedResponse<JoinedMemberResponse> {
+        let canisters: Vec<Principal> = DATA.with(|data| {
+            data.borrow()
+                .canisters
+                .clone()
+                .into_iter()
+                .map(|c| c.1.principal.clone())
+                .collect()
+        });
+
+        let mut joined: Vec<JoinedMemberResponse> = vec![];
+        for canister in canisters {
+            let mut canister_data =
+                Self::get_filtered_joined_child_data(canister, group_identifier).await;
+            joined.append(&mut canister_data);
+        }
+
+        get_paged_data(joined, limit, page)
+    }
+
+    // Method to get the data from a single child canister in chunks
+    // requires composite queries to be released to mainnet
+    async fn get_filtered_joined_child_data(
+        canister_principal: Principal,
+        group_identifier: Principal,
+    ) -> Vec<JoinedMemberResponse> {
+        // Do initial fetch of the first chunk and determine the number of chunks
+        let (mut bytes, (_, last)) =
+            Self::get_chunked_joined_child_data(canister_principal, group_identifier, 0, None)
+                .await;
+
+        // If there are more chunks, fetch them
+        if last > 1 {
+            for i in 1..last + 1 {
+                let (mut _bytes, _) = Self::get_chunked_joined_child_data(
+                    canister_principal,
+                    group_identifier,
+                    i,
+                    None,
+                )
+                .await;
+                // Append the bytes to the first chunk
+                bytes.append(&mut _bytes);
+            }
+        }
+
+        // Deserialize the bytes to the correct data type
+        match deserialize::<Vec<JoinedMemberResponse>>(bytes.clone()) {
+            Ok(_res) => _res,
+            Err(_err) => {
+                ic_cdk::println!("Error: {}", _err);
+                vec![]
+            }
+        }
+    }
+
+    // Inter canister call to fetch the chunked data from the child canister
+    async fn get_chunked_joined_child_data(
+        canister_principal: Principal,
+        group_identifier: Principal,
+        chunk: usize,
+        max_bytes_per_chunk: Option<usize>,
+    ) -> (Vec<u8>, (usize, usize)) {
+        // If the max bytes per chunk is not provided, use the default of 2_000_000 (2mb)
+        let _max_bytes_per_chunk = max_bytes_per_chunk.unwrap_or(2_000_000);
+        let result: Result<(Vec<u8>, (usize, usize)), _> = call::call(
+            canister_principal,
+            "get_chunked_join_data",
+            (group_identifier, chunk, _max_bytes_per_chunk),
+        )
+        .await;
+
+        // return the bytes and the chunk info, if there is an error, return an empty vec and chunk info
+        match result {
+            Ok(_res) => _res,
+            _ => (vec![], (0, 0)),
+        }
+    }
+
+    //
+    // INVITES
+    //
+    // Method used to get all the invites from the child canisters paged
+    // requires composite queries to be released to mainnet
+    pub async fn get_invites_child_canister_data(
+        group_identifier: Principal,
+        limit: usize,
+        page: usize,
+    ) -> PagedResponse<InviteMemberResponse> {
+        let canisters: Vec<Principal> = DATA.with(|data| {
+            data.borrow()
+                .canisters
+                .clone()
+                .into_iter()
+                .map(|c| c.1.principal.clone())
+                .collect()
+        });
+
+        let mut joined: Vec<InviteMemberResponse> = vec![];
+        for canister in canisters {
+            let mut canister_data =
+                Self::get_filtered_invites_child_data(canister, group_identifier).await;
+            joined.append(&mut canister_data);
+        }
+
+        get_paged_data(joined, limit, page)
+    }
+
+    // Method to get the data from a single child canister in chunks
+    // requires composite queries to be released to mainnet
+    async fn get_filtered_invites_child_data(
+        canister_principal: Principal,
+        group_identifier: Principal,
+    ) -> Vec<InviteMemberResponse> {
+        // Do initial fetch of the first chunk and determine the number of chunks
+        let (mut bytes, (_, last)) =
+            Self::get_chunked_invites_child_data(canister_principal, group_identifier, 0, None)
+                .await;
+
+        // If there are more chunks, fetch them
+        if last > 1 {
+            for i in 1..last + 1 {
+                let (mut _bytes, _) = Self::get_chunked_invites_child_data(
+                    canister_principal,
+                    group_identifier,
+                    i,
+                    None,
+                )
+                .await;
+                // Append the bytes to the first chunk
+                bytes.append(&mut _bytes);
+            }
+        }
+
+        // Deserialize the bytes to the correct data type
+        match deserialize::<Vec<InviteMemberResponse>>(bytes.clone()) {
+            Ok(_res) => _res,
+            Err(_err) => {
+                ic_cdk::println!("Error: {}", _err);
+                vec![]
+            }
+        }
+    }
+
+    // Inter canister call to fetch the chunked data from the child canister
+    async fn get_chunked_invites_child_data(
+        canister_principal: Principal,
+        group_identifier: Principal,
+        chunk: usize,
+        max_bytes_per_chunk: Option<usize>,
+    ) -> (Vec<u8>, (usize, usize)) {
+        // If the max bytes per chunk is not provided, use the default of 2_000_000 (2mb)
+        let _max_bytes_per_chunk = max_bytes_per_chunk.unwrap_or(2_000_000);
+        let result: Result<(Vec<u8>, (usize, usize)), _> = call::call(
+            canister_principal,
+            "get_chunked_invite_data",
+            (group_identifier, chunk, _max_bytes_per_chunk),
+        )
+        .await;
+
+        // return the bytes and the chunk info, if there is an error, return an empty vec and chunk info
+        match result {
+            Ok(_res) => _res,
+            _ => (vec![], (0, 0)),
+        }
     }
 }
