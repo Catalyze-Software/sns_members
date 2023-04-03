@@ -1,15 +1,15 @@
-use std::{cell::RefCell, vec};
+use std::{cell::RefCell, clone, vec};
 
 use candid::Principal;
 use ic_cdk::{
-    api::{call, time},
+    api::{self, call, time},
     id,
 };
 use ic_scalable_canister::store::Data;
 use ic_scalable_misc::{
     enums::{
         api_error_type::{ApiError, ApiErrorType},
-        privacy_type::{Gated, Privacy},
+        privacy_type::{GatedType, NeuronGatedRules, Privacy, TokenGated},
     },
     helpers::{
         error_helper::api_error,
@@ -21,6 +21,7 @@ use ic_scalable_misc::{
     },
     models::{
         identifier_model::Identifier,
+        neuron_models::{DissolveState, ListNeurons, ListNeuronsResponse},
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
@@ -118,11 +119,30 @@ impl Store {
                         None => {
                             // if there is no existing member, add a new one
                             let result = DATA.with(|data| {
-                                Data::add_entry(data, _updated_member, Some("mbr".to_string()))
+                                Data::add_entry(
+                                    data,
+                                    _updated_member.clone(),
+                                    Some("mbr".to_string()),
+                                )
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
                             Self::update_member_count_on_group(&group_identifier);
-                            result
+                            match result {
+                                // The group was not added to the data store because the canister is at capacity
+                                Err(err) => match err {
+                                    ApiError::CanisterAtCapacity(message) => {
+                                        let _data = DATA.with(|v| v.borrow().clone());
+                                        // Spawn a sibling canister and pass the group data to it
+                                        // TODO: work on logic to split member data
+                                        match Data::spawn_sibling(_data, _updated_member).await {
+                                            Ok(_) => Err(ApiError::CanisterAtCapacity(message)),
+                                            Err(err) => Err(err),
+                                        }
+                                    }
+                                    _ => Err(err),
+                                },
+                                Ok((_identifier, _member_data)) => Ok((_identifier, _member_data)),
+                            }
                         }
                         // if there is an existing member, update the existing one
                         Some((_identifier, _)) => {
@@ -136,8 +156,6 @@ impl Store {
                         }
                     },
                 }
-                // TODO: add scaling logic
-                // Determine if an entry needs to be updated or added as a new one
             }
         }
     }
@@ -485,41 +503,87 @@ impl Store {
                     None,
                 ))
             }
+            // Self::validate_neuron(caller, neuron_canister.governance_canister, neuron_canister.rules).await
             // If the group is gated, check if the caller owns a specific NFT
-            Gated(nft_canisters) => {
+            Gated(gated_type) => {
                 let mut is_valid = false;
-                // Loop over the canisters and check if the caller owns a specific NFT (inter-canister call)
-                for nft_canister in nft_canisters {
-                    is_valid =
-                        Self::validate_gated(caller, account_identifier.clone(), nft_canister)
+                use GatedType::*;
+                match gated_type {
+                    Neuron(neuron_canisters) => {
+                        for neuron_canister in neuron_canisters {
+                            is_valid = Self::validate_neuron(
+                                caller,
+                                neuron_canister.governance_canister,
+                                neuron_canister.rules,
+                            )
                             .await;
-                    if is_valid {
-                        break;
-                    }
-                }
-                if is_valid {
-                    match member {
-                        None => Ok(Member {
-                            principal: caller,
-                            profile_identifier: Principal::anonymous(),
-                            joined: vec![join],
-                            invites: vec![],
-                        }),
-                        Some((_, mut _member)) => {
-                            _member.joined.push(join);
-                            Ok(_member)
+                            if is_valid {
+                                break;
+                            }
+                        }
+                        if is_valid {
+                            match member {
+                                None => Ok(Member {
+                                    principal: caller,
+                                    profile_identifier: Principal::anonymous(),
+                                    joined: vec![join],
+                                    invites: vec![],
+                                }),
+                                Some((_, mut _member)) => {
+                                    _member.joined.push(join);
+                                    Ok(_member)
+                                }
+                            }
+                            // If the caller does not own the neuron, throw an error
+                        } else {
+                            return Err(api_error(
+                                ApiErrorType::Unauthorized,
+                                "NOT_OWNING_NEURON",
+                                "You are not owning this neuron required to join this group",
+                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                "add_invite_or_join_group_to_member",
+                                None,
+                            ));
                         }
                     }
-                    // If the caller does not own the NFT, throw an error
-                } else {
-                    return Err(api_error(
-                        ApiErrorType::Unauthorized,
-                        "NOT_OWNING_NFT",
-                        "You are not owning NFT / token required to join this group",
-                        DATA.with(|data| Data::get_name(data)).as_str(),
-                        "add_invite_or_join_group_to_member",
-                        None,
-                    ));
+                    Token(nft_canisters) => {
+                        // Loop over the canisters and check if the caller owns a specific NFT (inter-canister call)
+                        for nft_canister in nft_canisters {
+                            is_valid = Self::validate_gated(
+                                caller,
+                                account_identifier.clone(),
+                                nft_canister,
+                            )
+                            .await;
+                            if is_valid {
+                                break;
+                            }
+                        }
+                        if is_valid {
+                            match member {
+                                None => Ok(Member {
+                                    principal: caller,
+                                    profile_identifier: Principal::anonymous(),
+                                    joined: vec![join],
+                                    invites: vec![],
+                                }),
+                                Some((_, mut _member)) => {
+                                    _member.joined.push(join);
+                                    Ok(_member)
+                                }
+                            }
+                            // If the caller does not own the NFT, throw an error
+                        } else {
+                            return Err(api_error(
+                                ApiErrorType::Unauthorized,
+                                "NOT_OWNING_NFT",
+                                "You are not owning NFT / token required to join this group",
+                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                "add_invite_or_join_group_to_member",
+                                None,
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -529,7 +593,7 @@ impl Store {
     pub async fn validate_gated(
         principal: Principal,
         account_identifier: Option<String>,
-        nft_canister: Gated,
+        nft_canister: TokenGated,
     ) -> bool {
         // Check if the canister is a EXT, DIP20 or DIP721 canister
         match nft_canister.standard.as_str() {
@@ -559,6 +623,107 @@ impl Store {
                 response as u64 >= nft_canister.amount
             }
             _ => false,
+        }
+    }
+
+    // Method to check if the caller owns a specific neuron and it applies to the set rules
+    pub async fn validate_neuron(
+        principal: Principal,
+        governance_canister: Principal,
+        rules: Vec<NeuronGatedRules>,
+    ) -> bool {
+        let list_neuron_arg = ListNeurons {
+            of_principal: Some(principal),
+            limit: 100,
+            start_page_at: None,
+        };
+
+        let call: Result<(ListNeuronsResponse,), _> =
+            api::call::call(governance_canister, "list_neurons", (list_neuron_arg,)).await;
+
+        match call {
+            Ok((neurons,)) => {
+                // iterate over the neurons and check if the neuron applies to all the set rules
+                let mut is_valid = true;
+                for neuron in neurons.neurons {
+                    for rule in rules.clone() {
+                        match rule {
+                            NeuronGatedRules::IsDisolving(value) => {
+                                match &neuron.dissolve_state {
+                                    Some(_state) => {
+                                        use DissolveState::*;
+                                        match _state {
+                                            // neuron is not in a dissolving state
+                                            DissolveDelaySeconds(_time) => {
+                                                is_valid = false;
+                                                break;
+                                            }
+                                            // means that the neuron is in a dissolving state
+                                            WhenDissolvedTimestampSeconds(_time) => {}
+                                        }
+                                    }
+                                    None => {
+                                        is_valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            NeuronGatedRules::MinAge(_min_age_in_seconds) => {
+                                if neuron.created_timestamp_seconds < _min_age_in_seconds {
+                                    is_valid = false;
+                                    break;
+                                }
+                            }
+                            NeuronGatedRules::MinStake(_min_stake) => {
+                                let neuron_stake =
+                                    neuron.cached_neuron_stake_e8s as f64 / 100_000_000.0;
+                                let min_stake = _min_stake as f64 / 100_000_000.0;
+
+                                if neuron_stake.ceil() < min_stake.ceil() {
+                                    is_valid = false;
+                                    break;
+                                }
+                            }
+                            NeuronGatedRules::MinDissolveDelay(_min_dissolve_delay_in_seconds) => {
+                                match &neuron.dissolve_state {
+                                    Some(_state) => {
+                                        use DissolveState::*;
+                                        match _state {
+                                            // neuron is not in a dissolving state, time is locking period in seconds
+                                            DissolveDelaySeconds(_dissolve_delay_in_seconds) => {
+                                                if &_min_dissolve_delay_in_seconds
+                                                    < _dissolve_delay_in_seconds
+                                                {
+                                                    is_valid = false;
+                                                    break;
+                                                }
+                                            }
+                                            // means that the neuron is in a dissolving state, timestamp when neuron is done dissolving in seconds
+                                            WhenDissolvedTimestampSeconds(
+                                                _timestamp_in_seconds,
+                                            ) => {
+                                                let calculated_time = _timestamp_in_seconds
+                                                    - (time() / 1_000_000_000);
+                                                if _min_dissolve_delay_in_seconds < calculated_time
+                                                {
+                                                    is_valid = false;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        is_valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return is_valid;
+            }
+            Err(_) => false,
         }
     }
 
