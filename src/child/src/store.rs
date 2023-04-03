@@ -1,4 +1,4 @@
-use std::{cell::RefCell, clone, vec};
+use std::{cell::RefCell, vec};
 
 use candid::Principal;
 use ic_cdk::{
@@ -648,7 +648,7 @@ impl Store {
                 for neuron in neurons.neurons {
                     for rule in rules.clone() {
                         match rule {
-                            NeuronGatedRules::IsDisolving(value) => {
+                            NeuronGatedRules::IsDisolving(_) => {
                                 match &neuron.dissolve_state {
                                     Some(_state) => {
                                         use DissolveState::*;
