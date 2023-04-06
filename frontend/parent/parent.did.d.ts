@@ -33,6 +33,40 @@ export interface HttpResponse {
   'body' : Uint8Array | number[],
   'headers' : Array<HttpHeader>,
 }
+export interface Invite {
+  'updated_at' : bigint,
+  'group_identifier' : Principal,
+  'invite_type' : InviteType,
+  'created_at' : bigint,
+}
+export interface InviteMemberResponse {
+  'principal' : Principal,
+  'group_identifier' : Principal,
+  'invite' : Invite,
+  'member_identifier' : Principal,
+}
+export type InviteType = { 'OwnerRequest' : null } |
+  { 'UserRequest' : null };
+export interface JoinedMemberResponse {
+  'principal' : Principal,
+  'group_identifier' : Principal,
+  'member_identifier' : Principal,
+  'roles' : Array<string>,
+}
+export interface PagedResponse {
+  'total' : bigint,
+  'data' : Array<InviteMemberResponse>,
+  'page' : bigint,
+  'limit' : bigint,
+  'number_of_pages' : bigint,
+}
+export interface PagedResponse_1 {
+  'total' : bigint,
+  'data' : Array<JoinedMemberResponse>,
+  'page' : bigint,
+  'limit' : bigint,
+  'number_of_pages' : bigint,
+}
 export type Result = { 'Ok' : Principal } |
   { 'Err' : ApiError };
 export type Result_1 = { 'Ok' : ScalableCanisterDetails } |
@@ -56,11 +90,13 @@ export interface _SERVICE {
   '__get_candid_interface_tmp_hack' : ActorMethod<[], string>,
   'accept_cycles' : ActorMethod<[], bigint>,
   'close_child_canister_and_spawn_sibling' : ActorMethod<
-    [Principal, bigint, Uint8Array | number[], [] | [Principal]],
+    [bigint, Uint8Array | number[]],
     Result
   >,
   'get_available_canister' : ActorMethod<[], Result_1>,
   'get_canisters' : ActorMethod<[], Array<ScalableCanisterDetails>>,
+  'get_invites' : ActorMethod<[Principal, bigint, bigint], PagedResponse>,
   'get_latest_wasm_version' : ActorMethod<[], WasmVersion>,
+  'get_members' : ActorMethod<[Principal, bigint, bigint], PagedResponse_1>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
 }

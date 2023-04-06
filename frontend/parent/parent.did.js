@@ -48,6 +48,42 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : ScalableCanisterDetails,
     'Err' : IDL.Text,
   });
+  const InviteType = IDL.Variant({
+    'OwnerRequest' : IDL.Null,
+    'UserRequest' : IDL.Null,
+  });
+  const Invite = IDL.Record({
+    'updated_at' : IDL.Nat64,
+    'group_identifier' : IDL.Principal,
+    'invite_type' : InviteType,
+    'created_at' : IDL.Nat64,
+  });
+  const InviteMemberResponse = IDL.Record({
+    'principal' : IDL.Principal,
+    'group_identifier' : IDL.Principal,
+    'invite' : Invite,
+    'member_identifier' : IDL.Principal,
+  });
+  const PagedResponse = IDL.Record({
+    'total' : IDL.Nat64,
+    'data' : IDL.Vec(InviteMemberResponse),
+    'page' : IDL.Nat64,
+    'limit' : IDL.Nat64,
+    'number_of_pages' : IDL.Nat64,
+  });
+  const JoinedMemberResponse = IDL.Record({
+    'principal' : IDL.Principal,
+    'group_identifier' : IDL.Principal,
+    'member_identifier' : IDL.Principal,
+    'roles' : IDL.Vec(IDL.Text),
+  });
+  const PagedResponse_1 = IDL.Record({
+    'total' : IDL.Nat64,
+    'data' : IDL.Vec(JoinedMemberResponse),
+    'page' : IDL.Nat64,
+    'limit' : IDL.Nat64,
+    'number_of_pages' : IDL.Nat64,
+  });
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
     'method' : IDL.Text,
@@ -64,7 +100,7 @@ export const idlFactory = ({ IDL }) => {
     '__get_candid_interface_tmp_hack' : IDL.Func([], [IDL.Text], ['query']),
     'accept_cycles' : IDL.Func([], [IDL.Nat64], []),
     'close_child_canister_and_spawn_sibling' : IDL.Func(
-        [IDL.Principal, IDL.Nat64, IDL.Vec(IDL.Nat8), IDL.Opt(IDL.Principal)],
+        [IDL.Nat64, IDL.Vec(IDL.Nat8)],
         [Result],
         [],
       ),
@@ -74,8 +110,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(ScalableCanisterDetails)],
         ['query'],
       ),
+    'get_invites' : IDL.Func(
+        [IDL.Principal, IDL.Nat64, IDL.Nat64],
+        [PagedResponse],
+        ['query'],
+      ),
     'get_latest_wasm_version' : IDL.Func([], [WasmVersion], ['query']),
+    'get_members' : IDL.Func(
+        [IDL.Principal, IDL.Nat64, IDL.Nat64],
+        [PagedResponse_1],
+        ['query'],
+      ),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
   });
 };
-export const init = ({ IDL }) => { return [IDL.Principal]; };
+export const init = ({ IDL }) => { return []; };

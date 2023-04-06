@@ -1,8 +1,8 @@
-use std::{cell::RefCell, vec};
+use std::{cell::RefCell, collections::HashMap, vec};
 
 use candid::Principal;
 use ic_cdk::{
-    api::{self, call, time},
+    api::{call, time},
     id,
 };
 use ic_scalable_canister::store::Data;
@@ -21,7 +21,7 @@ use ic_scalable_misc::{
     },
     models::{
         identifier_model::Identifier,
-        neuron_models::{DissolveState, ListNeurons, ListNeuronsResponse},
+        neuron_models::{DissolveState, ListNeurons, ListNeuronsResponse, NeuronId},
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
@@ -511,7 +511,7 @@ impl Store {
                 match gated_type {
                     Neuron(neuron_canisters) => {
                         for neuron_canister in neuron_canisters {
-                            is_valid = Self::validate_neuron(
+                            is_valid = Self::validate_neuron_gated(
                                 caller,
                                 neuron_canister.governance_canister,
                                 neuron_canister.rules,
@@ -549,7 +549,7 @@ impl Store {
                     Token(nft_canisters) => {
                         // Loop over the canisters and check if the caller owns a specific NFT (inter-canister call)
                         for nft_canister in nft_canisters {
-                            is_valid = Self::validate_gated(
+                            is_valid = Self::validate_nft_gated(
                                 caller,
                                 account_identifier.clone(),
                                 nft_canister,
@@ -590,7 +590,7 @@ impl Store {
     }
 
     // Method to check if the caller owns a specific NFT
-    pub async fn validate_gated(
+    pub async fn validate_nft_gated(
         principal: Principal,
         account_identifier: Option<String>,
         nft_canister: TokenGated,
@@ -627,7 +627,7 @@ impl Store {
     }
 
     // Method to check if the caller owns a specific neuron and it applies to the set rules
-    pub async fn validate_neuron(
+    pub async fn validate_neuron_gated(
         principal: Principal,
         governance_canister: Principal,
         rules: Vec<NeuronGatedRules>,
@@ -639,13 +639,15 @@ impl Store {
         };
 
         let call: Result<(ListNeuronsResponse,), _> =
-            api::call::call(governance_canister, "list_neurons", (list_neuron_arg,)).await;
+            call::call(governance_canister, "list_neurons", (list_neuron_arg,)).await;
 
         match call {
             Ok((neurons,)) => {
+                let mut is_valid: HashMap<Vec<u8>, bool> = HashMap::new();
                 // iterate over the neurons and check if the neuron applies to all the set rules
-                let mut is_valid = true;
                 for neuron in neurons.neurons {
+                    let neuron_id = neuron.id.unwrap().id;
+                    is_valid.insert(neuron_id.clone(), true);
                     for rule in rules.clone() {
                         match rule {
                             NeuronGatedRules::IsDisolving(_) => {
@@ -655,7 +657,7 @@ impl Store {
                                         match _state {
                                             // neuron is not in a dissolving state
                                             DissolveDelaySeconds(_time) => {
-                                                is_valid = false;
+                                                is_valid.insert(neuron_id, false);
                                                 break;
                                             }
                                             // means that the neuron is in a dissolving state
@@ -663,14 +665,14 @@ impl Store {
                                         }
                                     }
                                     None => {
-                                        is_valid = false;
+                                        is_valid.insert(neuron_id, false);
                                         break;
                                     }
                                 }
                             }
                             NeuronGatedRules::MinAge(_min_age_in_seconds) => {
                                 if neuron.created_timestamp_seconds < _min_age_in_seconds {
-                                    is_valid = false;
+                                    is_valid.insert(neuron_id, false);
                                     break;
                                 }
                             }
@@ -680,7 +682,7 @@ impl Store {
                                 let min_stake = _min_stake as f64 / 100_000_000.0;
 
                                 if neuron_stake.ceil() < min_stake.ceil() {
-                                    is_valid = false;
+                                    is_valid.insert(neuron_id, false);
                                     break;
                                 }
                             }
@@ -692,28 +694,22 @@ impl Store {
                                             // neuron is not in a dissolving state, time is locking period in seconds
                                             DissolveDelaySeconds(_dissolve_delay_in_seconds) => {
                                                 if &_min_dissolve_delay_in_seconds
-                                                    < _dissolve_delay_in_seconds
+                                                    > _dissolve_delay_in_seconds
                                                 {
-                                                    is_valid = false;
+                                                    is_valid.insert(neuron_id, false);
                                                     break;
                                                 }
                                             }
+                                            // if the neuron is dissolving, make invalid
                                             // means that the neuron is in a dissolving state, timestamp when neuron is done dissolving in seconds
-                                            WhenDissolvedTimestampSeconds(
-                                                _timestamp_in_seconds,
-                                            ) => {
-                                                let calculated_time = _timestamp_in_seconds
-                                                    - (time() / 1_000_000_000);
-                                                if _min_dissolve_delay_in_seconds < calculated_time
-                                                {
-                                                    is_valid = false;
-                                                    break;
-                                                }
+                                            WhenDissolvedTimestampSeconds(_) => {
+                                                is_valid.insert(neuron_id, false);
+                                                break;
                                             }
                                         }
                                     }
                                     None => {
-                                        is_valid = false;
+                                        is_valid.insert(neuron_id, false);
                                         break;
                                     }
                                 }
@@ -721,7 +717,7 @@ impl Store {
                         }
                     }
                 }
-                return is_valid;
+                return is_valid.iter().any(|v| v.1 == &true);
             }
             Err(_) => false,
         }
@@ -1051,7 +1047,7 @@ impl Store {
                             }
                         }
                     }
-                }
+                } // 1710994309 / 100 = 17109943.09
             }
         })
     }

@@ -58,19 +58,6 @@ type Member = record {
   joined : vec Join;
   profile_identifier : principal;
 };
-type Metadata = record {
-  updated_at : nat64;
-  name : text;
-  max_entries : nat64;
-  current_entry_id : opt nat64;
-  created_at : nat64;
-  used_data : nat64;
-  cycles : nat64;
-  is_available : bool;
-  identifier : nat64;
-  entries_count : nat64;
-  parent : principal;
-};
 type Result = variant { Ok : record { principal; Member }; Err : ApiError };
 type Result_1 = variant { Ok; Err : ApiError };
 type Result_2 = variant { Ok : principal; Err : ApiError };
@@ -79,7 +66,6 @@ type Result_4 = variant { Ok : vec InviteMemberResponse; Err : ApiError };
 type Result_5 = variant { Ok : JoinedMemberResponse; Err : ApiError };
 type Result_6 = variant { Ok : vec JoinedMemberResponse; Err : ApiError };
 type Result_7 = variant { Ok : record { principal; vec text }; Err : text };
-type Result_8 = variant { Ok : Metadata; Err : ApiError };
 type UpdateMessage = record { canister_principal : principal; message : text };
 type ValidationResponse = record { field : text; message : text };
 service : (principal, text, nat64) -> {
@@ -91,6 +77,14 @@ service : (principal, text, nat64) -> {
   add_owner : (principal, principal) -> (Result_2);
   assign_role : (text, principal, principal) -> (Result_3);
   create_empty_member : (principal, principal) -> (Result_2);
+  get_chunked_invite_data : (principal, nat64, nat64) -> (
+      vec nat8,
+      record { nat64; nat64 },
+    ) query;
+  get_chunked_join_data : (principal, nat64, nat64) -> (
+      vec nat8,
+      record { nat64; nat64 },
+    ) query;
   get_group_invites : (principal) -> (Result_4);
   get_group_invites_count : (vec principal) -> (
       vec record { principal; nat64 },
@@ -104,7 +98,6 @@ service : (principal, text, nat64) -> {
       vec record { principal; vec principal },
     ) query;
   get_member_roles : (principal, principal) -> (Result_7) query;
-  get_metadata : () -> (Result_8) query;
   get_self : () -> (Result) query;
   http_request : (HttpRequest) -> (HttpResponse) query;
   invite_to_group : (principal, principal) -> (Result);
@@ -114,5 +107,4 @@ service : (principal, text, nat64) -> {
   remove_member_from_group : (principal, principal) -> (Result_1);
   remove_member_invite_from_group : (principal, principal) -> (Result_1);
   remove_role : (text, principal, principal) -> (Result_3);
-  sanity_check : () -> (text) query;
 }

@@ -81,20 +81,6 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Text)),
     'Err' : IDL.Text,
   });
-  const Metadata = IDL.Record({
-    'updated_at' : IDL.Nat64,
-    'name' : IDL.Text,
-    'max_entries' : IDL.Nat64,
-    'current_entry_id' : IDL.Opt(IDL.Nat64),
-    'created_at' : IDL.Nat64,
-    'used_data' : IDL.Nat64,
-    'cycles' : IDL.Nat64,
-    'is_available' : IDL.Bool,
-    'identifier' : IDL.Nat64,
-    'entries_count' : IDL.Nat64,
-    'parent' : IDL.Principal,
-  });
-  const Result_8 = IDL.Variant({ 'Ok' : Metadata, 'Err' : ApiError });
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
     'method' : IDL.Text,
@@ -132,6 +118,16 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
+    'get_chunked_invite_data' : IDL.Func(
+        [IDL.Principal, IDL.Nat64, IDL.Nat64],
+        [IDL.Vec(IDL.Nat8), IDL.Tuple(IDL.Nat64, IDL.Nat64)],
+        ['query'],
+      ),
+    'get_chunked_join_data' : IDL.Func(
+        [IDL.Principal, IDL.Nat64, IDL.Nat64],
+        [IDL.Vec(IDL.Nat8), IDL.Tuple(IDL.Nat64, IDL.Nat64)],
+        ['query'],
+      ),
     'get_group_invites' : IDL.Func([IDL.Principal], [Result_4], []),
     'get_group_invites_count' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
@@ -159,7 +155,6 @@ export const idlFactory = ({ IDL }) => {
         [Result_7],
         ['query'],
       ),
-    'get_metadata' : IDL.Func([], [Result_8], ['query']),
     'get_self' : IDL.Func([], [Result], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'invite_to_group' : IDL.Func([IDL.Principal, IDL.Principal], [Result], []),
@@ -181,7 +176,6 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
-    'sanity_check' : IDL.Func([], [IDL.Text], ['query']),
   });
 };
 export const init = ({ IDL }) => {

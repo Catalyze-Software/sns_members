@@ -60,19 +60,6 @@ export interface Member {
   'joined' : Array<Join>,
   'profile_identifier' : Principal,
 }
-export interface Metadata {
-  'updated_at' : bigint,
-  'name' : string,
-  'max_entries' : bigint,
-  'current_entry_id' : [] | [bigint],
-  'created_at' : bigint,
-  'used_data' : bigint,
-  'cycles' : bigint,
-  'is_available' : boolean,
-  'identifier' : bigint,
-  'entries_count' : bigint,
-  'parent' : Principal,
-}
 export type Result = { 'Ok' : [Principal, Member] } |
   { 'Err' : ApiError };
 export type Result_1 = { 'Ok' : null } |
@@ -89,8 +76,6 @@ export type Result_6 = { 'Ok' : Array<JoinedMemberResponse> } |
   { 'Err' : ApiError };
 export type Result_7 = { 'Ok' : [Principal, Array<string>] } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : Metadata } |
-  { 'Err' : ApiError };
 export interface UpdateMessage {
   'canister_principal' : Principal,
   'message' : string,
@@ -108,6 +93,14 @@ export interface _SERVICE {
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
+  'get_chunked_invite_data' : ActorMethod<
+    [Principal, bigint, bigint],
+    [Uint8Array | number[], [bigint, bigint]]
+  >,
+  'get_chunked_join_data' : ActorMethod<
+    [Principal, bigint, bigint],
+    [Uint8Array | number[], [bigint, bigint]]
+  >,
   'get_group_invites' : ActorMethod<[Principal], Result_4>,
   'get_group_invites_count' : ActorMethod<
     [Array<Principal>],
@@ -124,7 +117,6 @@ export interface _SERVICE {
     Array<[Principal, Array<Principal>]>
   >,
   'get_member_roles' : ActorMethod<[Principal, Principal], Result_7>,
-  'get_metadata' : ActorMethod<[], Result_8>,
   'get_self' : ActorMethod<[], Result>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
@@ -137,5 +129,4 @@ export interface _SERVICE {
     Result_1
   >,
   'remove_role' : ActorMethod<[string, Principal, Principal], Result_3>,
-  'sanity_check' : ActorMethod<[], string>,
 }
