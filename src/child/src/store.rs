@@ -21,7 +21,7 @@ use ic_scalable_misc::{
     },
     models::{
         identifier_model::Identifier,
-        neuron_models::{DissolveState, ListNeurons, ListNeuronsResponse, NeuronId},
+        neuron_models::{DissolveState, ListNeurons, ListNeuronsResponse},
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
@@ -1213,7 +1213,7 @@ impl Store {
                             _member.invites = _member
                                 .invites
                                 .iter()
-                                .filter(|i| &i.group_identifier == &group_identifier)
+                                .filter(|i| &i.group_identifier != &group_identifier)
                                 .cloned()
                                 .collect();
 
