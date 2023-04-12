@@ -1,13 +1,24 @@
 use candid::{candid_method, Principal};
 use ic_cdk::caller;
 use ic_cdk_macros::{query, update};
+use ic_scalable_canister::store::Data;
 use ic_scalable_misc::enums::api_error_type::ApiError;
 
 use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member};
 
-use crate::store::DATA;
+use crate::{store::DATA, IDENTIFIER_KIND};
 
 use super::store::Store;
+
+#[update]
+#[candid_method(update)]
+pub fn migration_add_members(members: Vec<(Principal, Member)>) -> () {
+    DATA.with(|data| {
+        for member in members {
+            let _ = Data::add_entry(data, member.1, Some(IDENTIFIER_KIND.to_string()));
+        }
+    })
+}
 
 // This method is used to join an existing group
 // The method is async because checks if the group exists and optionally creates a new canister

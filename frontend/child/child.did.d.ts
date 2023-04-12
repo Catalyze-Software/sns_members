@@ -122,6 +122,10 @@ export interface _SERVICE {
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
   'join_group' : ActorMethod<[Principal, [] | [string]], Result>,
   'leave_group' : ActorMethod<[Principal], Result_1>,
+  'migration_add_members' : ActorMethod<
+    [Array<[Principal, Member]>],
+    undefined
+  >,
   'remove_invite' : ActorMethod<[Principal], Result_1>,
   'remove_member_from_group' : ActorMethod<[Principal, Principal], Result_1>,
   'remove_member_invite_from_group' : ActorMethod<

@@ -30,6 +30,8 @@ use shared::member_model::{
     Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member,
 };
 
+use crate::IDENTIFIER_KIND;
+
 thread_local! {
     pub static DATA: RefCell<Data<Member>>  = RefCell::new(Data::default());
 }
@@ -122,7 +124,7 @@ impl Store {
                                 Data::add_entry(
                                     data,
                                     _updated_member.clone(),
-                                    Some("mbr".to_string()),
+                                    Some(IDENTIFIER_KIND.to_string()),
                                 )
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
@@ -190,8 +192,9 @@ impl Store {
                         invites: vec![],
                     };
                     // Add the new member
-                    let result = DATA
-                        .with(|data| Data::add_entry(data, empty_member, Some("mbr".to_string())));
+                    let result = DATA.with(|data| {
+                        Data::add_entry(data, empty_member, Some(IDENTIFIER_KIND.to_string()))
+                    });
                     match result {
                         Ok((_identfier, _)) => Ok(_identfier),
                         Err(err) => Err(err),
@@ -1008,8 +1011,11 @@ impl Store {
                                 invites: vec![],
                             };
 
-                            let response =
-                                Data::add_entry(data, new_member, Some("mbr".to_string()));
+                            let response = Data::add_entry(
+                                data,
+                                new_member,
+                                Some(IDENTIFIER_KIND.to_string()),
+                            );
                             match response {
                                 Err(err) => Err(err),
                                 Ok((_identifier, _member)) => Ok(_identifier),
@@ -1080,7 +1086,7 @@ impl Store {
                         invites: vec![invite],
                     };
                     // Add the member to the members array
-                    Data::add_entry(data, member, Some("mbr".to_string()))
+                    Data::add_entry(data, member, Some(IDENTIFIER_KIND.to_string()))
                 }
                 Some((_identifier, mut _member)) => {
                     // If there is an existing member, add the invite to the invites array

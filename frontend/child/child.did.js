@@ -160,6 +160,11 @@ export const idlFactory = ({ IDL }) => {
     'invite_to_group' : IDL.Func([IDL.Principal, IDL.Principal], [Result], []),
     'join_group' : IDL.Func([IDL.Principal, IDL.Opt(IDL.Text)], [Result], []),
     'leave_group' : IDL.Func([IDL.Principal], [Result_1], []),
+    'migration_add_members' : IDL.Func(
+        [IDL.Vec(IDL.Tuple(IDL.Principal, Member))],
+        [],
+        [],
+      ),
     'remove_invite' : IDL.Func([IDL.Principal], [Result_1], []),
     'remove_member_from_group' : IDL.Func(
         [IDL.Principal, IDL.Principal],

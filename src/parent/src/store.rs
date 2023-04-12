@@ -407,25 +407,6 @@ impl ScalableData {
             return Err("WASM is the same, skipping child WASM update".to_string());
         }
 
-        if old_store.child_wasm_data.bytes != bytes {
-            match old_store.child_wasm_data.wasm_version {
-                WasmVersion::None => {
-                    // return Err("Wrong WASM version type, skipping child WASM update".to_string())
-                }
-                WasmVersion::Version(_version) => {
-                    if version <= _version {
-                        return Err(format!(
-                            "Please provide a higher version as {_version}, skipping child WASM update"
-                        )
-                        .to_string());
-                    }
-                }
-                WasmVersion::Custom => {
-                    return Err("Wrong WASM version type, skipping child WASM update".to_string())
-                }
-            }
-        }
-
         let details = WasmDetails {
             label: "child_member_canister".to_string(),
             bytes,
