@@ -1,6 +1,6 @@
 use candid::{CandidType, Deserialize};
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(CandidType, Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Invite {
     pub updated_at: u64,
     pub invite_type: InviteType,
@@ -15,7 +15,7 @@ impl Default for Invite {
     }
 }
 
-#[derive(CandidType, Debug, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(CandidType, Debug, Clone, Deserialize, PartialEq, Eq)]
 pub enum InviteType {
     OwnerRequest,
     UserRequest,

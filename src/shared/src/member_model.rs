@@ -20,7 +20,7 @@ impl Default for Member {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Join {
     pub group_identifier: Principal,
     pub roles: Vec<String>,
@@ -36,7 +36,7 @@ pub struct Invite {
     pub created_at: u64,
 }
 
-#[derive(CandidType, Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(CandidType, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InviteType {
     OwnerRequest,
     UserRequest,
