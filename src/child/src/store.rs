@@ -1107,7 +1107,7 @@ impl Store {
         match Self::_get_member_from_caller(member_principal) {
             // If there is no member, throw an error
             None => Err(Self::_member_not_found_error(
-                "remove_invite_from_member",
+                "accept_user_request_group_invite",
                 None,
             )),
             // If there is a member, continue
@@ -1180,7 +1180,7 @@ impl Store {
             match Self::_get_member_from_caller(caller) {
                 // If there is no member, throw an error
                 None => Err(Self::_member_not_found_error(
-                    "remove_invite_from_member",
+                    "accept_owner_request_group_invite",
                     None,
                 )),
                 // If there is a member, continue
