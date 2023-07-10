@@ -19,6 +19,7 @@ pub fn migration_add_members(members: Vec<(Principal, Member)>) -> () {
             .unwrap()
     {
         DATA.with(|data| {
+            data.borrow_mut().current_entry_id = members.clone().len() as u64;
             data.borrow_mut().entries = HashMap::from_iter(members);
         })
     }
