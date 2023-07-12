@@ -30,7 +30,6 @@ export interface HttpResponse {
 }
 export interface Invite {
   'updated_at' : bigint,
-  'group_identifier' : Principal,
   'invite_type' : InviteType,
   'created_at' : bigint,
 }
@@ -44,7 +43,6 @@ export type InviteType = { 'OwnerRequest' : null } |
   { 'UserRequest' : null };
 export interface Join {
   'updated_at' : bigint,
-  'group_identifier' : Principal,
   'created_at' : bigint,
   'roles' : Array<string>,
 }
@@ -56,8 +54,8 @@ export interface JoinedMemberResponse {
 }
 export interface Member {
   'principal' : Principal,
-  'invites' : Array<Invite>,
-  'joined' : Array<Join>,
+  'invites' : Array<[Principal, Invite]>,
+  'joined' : Array<[Principal, Join]>,
   'profile_identifier' : Principal,
 }
 export type Result = { 'Ok' : [Principal, Member] } |

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, vec};
+use std::{cell::RefCell, collections::HashMap, iter::FromIterator, vec};
 
 use candid::Principal;
 use ic_cdk::{
@@ -46,7 +46,7 @@ impl Store {
         account_identifier: Option<String>,
     ) -> Result<(Principal, Member), ApiError> {
         // Get the group owner and privacy from an inter-canister call
-        let group_owner_and_privacy =
+        let group_owner_and_privacy: Result<(Principal, Privacy), ApiError> =
             Self::get_group_owner_and_privacy(group_identifier.clone()).await;
 
         match group_owner_and_privacy {
@@ -73,7 +73,7 @@ impl Store {
                         if _exisiting_member
                             .joined
                             .iter()
-                            .any(|m| &m.group_identifier == &group_identifier)
+                            .any(|(_group_identifier, _)| _group_identifier == &group_identifier)
                         {
                             return Err(api_error(
                                 ApiErrorType::BadRequest,
@@ -88,7 +88,7 @@ impl Store {
                         if _exisiting_member
                             .invites
                             .iter()
-                            .any(|m| &m.group_identifier == &group_identifier)
+                            .any(|(_group_identifier, _)| _group_identifier == &group_identifier)
                         {
                             return Err(api_error(
                                 ApiErrorType::BadRequest,
@@ -135,7 +135,6 @@ impl Store {
                                     ApiError::CanisterAtCapacity(message) => {
                                         let _data = DATA.with(|v| v.borrow().clone());
                                         // Spawn a sibling canister and pass the group data to it
-                                        // TODO: work on logic to split member data
                                         match Data::spawn_sibling(_data, _updated_member).await {
                                             Ok(_) => Err(ApiError::CanisterAtCapacity(message)),
                                             Err(err) => Err(err),
@@ -188,8 +187,8 @@ impl Store {
                     let empty_member = Member {
                         principal: caller,
                         profile_identifier,
-                        joined: vec![],
-                        invites: vec![],
+                        joined: HashMap::new(),
+                        invites: HashMap::new(),
                     };
                     // Add the new member
                     let result = DATA.with(|data| {
@@ -224,17 +223,7 @@ impl Store {
 
             // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
-                // Filter out the group identifier from the joined array
-                let joined: Vec<Join> = _member
-                    .joined
-                    .iter()
-                    .filter(|j| &j.group_identifier != &group_identifier)
-                    .cloned()
-                    .collect();
-
-                // Update the joined array
-                _member.joined = joined;
-                // Update the member
+                _member.joined.remove(&group_identifier);
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(Self::update_member_count_on_group(&group_identifier))
             }
@@ -250,16 +239,7 @@ impl Store {
             None => Err(Self::_member_not_found_error("leave_group", None)),
             // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
-                // Filter out the group identifier from the invites array
-                let invites: Vec<Invite> = _member
-                    .invites
-                    .into_iter()
-                    .filter(|j| &j.group_identifier != &group_identifier)
-                    .collect();
-
-                // Update the invites array
-                _member.invites = invites;
-                // Update the member
+                _member.invites.remove(&group_identifier);
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(())
             }
@@ -277,41 +257,28 @@ impl Store {
 
         if let Ok((_identifier, mut _member)) = member {
             // Get the existing roles for the group
-            let existing_roles = _member
-                .joined
-                .iter()
-                .filter(|j| &j.group_identifier == &group_identifier)
-                .map(|j| j.roles.clone())
-                .flatten()
-                .collect::<Vec<String>>();
+            if let Some(_joined) = _member.joined.get(&group_identifier) {
+                let existing_roles = _joined.roles.clone();
+                if existing_roles.contains(&role) {
+                    return Err(());
+                }
 
-            if existing_roles.contains(&role) {
-                return Err(());
-            }
-
-            // Update the joined array
-            let joined: Vec<Join> = _member
-                .joined
-                .into_iter()
-                .map(|j| {
-                    if j.group_identifier == group_identifier {
-                        let mut roles = j.roles;
-                        roles.push(role.clone());
-                        Join {
-                            group_identifier: j.group_identifier,
-                            roles,
+                match _member.joined.get_mut(&group_identifier) {
+                    Some(_join) => {
+                        _join.roles.push(role.clone());
+                        _join.updated_at = time();
+                    }
+                    None => {
+                        let join = Join {
+                            roles: vec![role.clone()],
                             updated_at: time(),
                             created_at: time(),
-                        }
-                    } else {
-                        j
+                        };
+                        _member.joined.insert(group_identifier, join);
                     }
-                })
-                .collect();
-
-            // Update the member
-            _member.joined = joined;
-            let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+                }
+                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+            }
             Ok(())
         } else {
             Err(())
@@ -327,30 +294,23 @@ impl Store {
         // Get the existing member
         let member = DATA.with(|data| Data::get_entry(data, member_identifier));
         if let Ok((_identifier, mut _member)) = member {
-            // Update the joined array
-            let joined: Vec<Join> = _member
-                .joined
-                .into_iter()
-                .map(|j| {
-                    // If the group identifier matches, remove the role
-                    if j.group_identifier == group_identifier {
-                        let roles: Vec<String> =
-                            j.roles.into_iter().filter(|r| r != &role).collect();
-                        Join {
-                            group_identifier: j.group_identifier,
-                            roles,
-                            updated_at: time(),
-                            created_at: time(),
-                        }
-                        // If the group identifier does not match, return the original join
-                    } else {
-                        j
-                    }
-                })
-                .collect();
+            let joined = _member.joined.get_mut(&group_identifier);
 
-            // Update the member
-            _member.joined = joined;
+            match joined {
+                Some(_join) => {
+                    _join.roles = _join
+                        .roles
+                        .iter()
+                        .filter(|_role| _role != &&role)
+                        .map(|_role| _role.clone())
+                        .collect();
+                    _join.updated_at = time();
+                }
+                None => {
+                    return Err(());
+                }
+            }
+
             let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
             Ok(())
         } else {
@@ -366,9 +326,9 @@ impl Store {
     ) -> Result<(), ApiError> {
         // Get the existing member
         if let Some((_, _member)) = Self::_get_member_from_caller(caller) {
-            if _member.joined.iter().any(|j| {
+            if _member.joined.iter().any(|(_group_identifier, _join)| {
                 // Check if the member is an owner of the group
-                j.group_identifier == group_identifier && j.roles.contains(&"owner".to_string())
+                _group_identifier == &group_identifier && _join.roles.contains(&"owner".to_string())
             }) {
                 // Get the member to remove the join from
                 match Self::_get_member_from_caller(member_principal) {
@@ -377,17 +337,9 @@ impl Store {
                         None,
                     )),
                     Some((_identifier, mut _member)) => {
-                        // Filter out the group identifier from the joined array
-                        let joined: Vec<Join> = _member
-                            .joined
-                            .into_iter()
-                            .filter(|j| &j.group_identifier != &group_identifier)
-                            .collect();
-
-                        // Update the joined array
-                        _member.joined = joined;
+                        _member.joined.remove(&group_identifier);
                         let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
-                        return Ok(Self::update_member_count_on_group(&group_identifier));
+                        Ok(Self::update_member_count_on_group(&group_identifier))
                     }
                 }
                 // If the member is not an owner, throw an error
@@ -424,14 +376,7 @@ impl Store {
             )),
             // If the member exists, remove the invite
             Some((_identifier, mut _member)) => {
-                // Filter out the group identifier from the invites array
-                let invites: Vec<Invite> = _member
-                    .invites
-                    .into_iter()
-                    .filter(|j| &j.group_identifier != &group_identifier)
-                    .collect();
-                // Update the invites array
-                _member.invites = invites;
+                _member.invites.remove(&group_identifier);
                 let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
                 Ok(())
             }
@@ -449,7 +394,6 @@ impl Store {
     ) -> Result<Member, ApiError> {
         // Create a join entry based on the group privacy settings and set the default role
         let join = Join {
-            group_identifier: group_identifier.clone(),
             roles: vec!["member".to_string()],
             updated_at: time(),
             created_at: time(),
@@ -457,7 +401,6 @@ impl Store {
 
         // Create an invite entry based on the group privacy settings
         let invite = Invite {
-            group_identifier,
             invite_type: InviteType::UserRequest,
             updated_at: time(),
             created_at: time(),
@@ -471,12 +414,12 @@ impl Store {
                 None => Ok(Member {
                     principal: caller,
                     profile_identifier: Principal::anonymous(),
-                    joined: vec![join],
-                    invites: vec![],
+                    joined: HashMap::from_iter(vec![(group_identifier, join)]),
+                    invites: HashMap::new(),
                 }),
                 // If the member exists, add the join to the member
                 Some((_, mut _member)) => {
-                    _member.joined.push(join);
+                    _member.joined.insert(group_identifier, join);
                     Ok(_member)
                 }
             },
@@ -486,12 +429,12 @@ impl Store {
                 None => Ok(Member {
                     principal: caller,
                     profile_identifier: Principal::anonymous(),
-                    joined: vec![],
-                    invites: vec![invite],
+                    joined: HashMap::new(),
+                    invites: HashMap::from_iter(vec![(group_identifier, invite)]),
                 }),
                 // If the member exists, add the invite to the member
                 Some((_, mut _member)) => {
-                    _member.invites.push(invite);
+                    _member.invites.insert(group_identifier, invite);
                     Ok(_member)
                 }
             },
@@ -529,11 +472,11 @@ impl Store {
                                 None => Ok(Member {
                                     principal: caller,
                                     profile_identifier: Principal::anonymous(),
-                                    joined: vec![join],
-                                    invites: vec![],
+                                    joined: HashMap::from_iter(vec![(group_identifier, join)]),
+                                    invites: HashMap::new(),
                                 }),
                                 Some((_, mut _member)) => {
-                                    _member.joined.push(join);
+                                    _member.joined.insert(group_identifier, join);
                                     Ok(_member)
                                 }
                             }
@@ -567,11 +510,11 @@ impl Store {
                                 None => Ok(Member {
                                     principal: caller,
                                     profile_identifier: Principal::anonymous(),
-                                    joined: vec![join],
-                                    invites: vec![],
+                                    joined: HashMap::from_iter(vec![(group_identifier, join)]),
+                                    invites: HashMap::new(),
                                 }),
                                 Some((_, mut _member)) => {
-                                    _member.joined.push(join);
+                                    _member.joined.insert(group_identifier, join);
                                     Ok(_member)
                                 }
                             }
@@ -747,11 +690,7 @@ impl Store {
         match member {
             // If the member exists, return the roles
             Ok((_member_identifier, _member)) => {
-                if let Some(_join) = _member
-                    .joined
-                    .iter()
-                    .find(|j| j.group_identifier == group_identifier)
-                {
+                if let Some(_join) = _member.joined.get(&group_identifier) {
                     Ok((_member.principal, _join.roles.clone()))
                 // If the member does not exist in the group, return an empty array
                 } else {
@@ -774,11 +713,7 @@ impl Store {
         match member {
             // If the member exists, return the roles
             Some((_member_identifier, _member)) => {
-                if let Some(_join) = _member
-                    .joined
-                    .iter()
-                    .find(|j| j.group_identifier == group_identifier)
-                {
+                if let Some(_join) = _member.joined.get(&group_identifier) {
                     Ok((_member.principal, _join.roles.clone()))
                 // If the member does not exist in the group, return an empty array
                 } else {
@@ -805,10 +740,7 @@ impl Store {
                 )),
                 // If the member exists, continue
                 Some((_identifier, _member)) => {
-                    let join = _member
-                        .joined
-                        .iter()
-                        .find(|j| &j.group_identifier == &group_identifier);
+                    let join = _member.joined.get(&group_identifier);
 
                     match join {
                         // If the member does not exist in the group, return an error
@@ -822,7 +754,7 @@ impl Store {
                         )),
                         // If the member exists in the group, return the joined member response
                         Some(_join) => Ok(JoinedMemberResponse {
-                            group_identifier: group_identifier,
+                            group_identifier,
                             member_identifier: _identifier,
                             principal: caller,
                             roles: _join.roles.clone(),
@@ -841,12 +773,7 @@ impl Store {
             // Filter the members that are in the group
             members
                 .iter()
-                .filter(|(_identifier, _member)| {
-                    _member
-                        .joined
-                        .iter()
-                        .any(|j| &j.group_identifier == &group_identifier)
-                })
+                .filter(|(_, _member)| _member.joined.get(&group_identifier).is_some())
                 .map(|(_identifier, _member)| {
                     Self::map_member_to_joined_member_response(
                         _identifier,
@@ -871,12 +798,7 @@ impl Store {
             for group_identifier in group_identifiers {
                 let count = members
                     .iter()
-                    .filter(|(_identifier, member)| {
-                        member
-                            .joined
-                            .iter()
-                            .any(|j| &j.group_identifier == &group_identifier)
-                    })
+                    .filter(|(_identifier, member)| member.joined.get(&group_identifier).is_some())
                     .count();
                 // Push the group identifier and the count to the members count array
                 members_counts.push((group_identifier, count));
@@ -904,7 +826,7 @@ impl Store {
             if let Ok((_, _member)) = member {
                 for joined in _member.joined.iter() {
                     // Push the group identifier to the groups array
-                    groups.push(joined.group_identifier.clone());
+                    groups.push(joined.0.clone());
                 }
             }
             // Push the member identifier and the groups array to the members with groups array
@@ -927,12 +849,7 @@ impl Store {
             for group_identifier in group_identifiers {
                 let count = members
                     .iter()
-                    .filter(|(_identifier, member)| {
-                        member
-                            .invites
-                            .iter()
-                            .any(|j| &j.group_identifier == &group_identifier)
-                    })
+                    .filter(|(_identifier, member)| member.invites.get(&group_identifier).is_some())
                     .count();
                 // Push the group identifier and the count to the invite count array
                 members_counts.push((group_identifier, count));
@@ -951,12 +868,7 @@ impl Store {
             // Filter the members invites that are in the group
             members
                 .iter()
-                .filter(|(_identifier, _member)| {
-                    _member
-                        .invites
-                        .iter()
-                        .any(|j| &j.group_identifier == &group_identifier)
-                })
+                .filter(|(_, _member)| _member.invites.get(&group_identifier).is_some())
                 .map(|(_identifier, _member)| {
                     Self::map_member_to_invite_member_response(
                         _identifier,
@@ -1002,13 +914,15 @@ impl Store {
                             let new_member = Member {
                                 principal: owner_principal,
                                 profile_identifier: Principal::anonymous(),
-                                joined: vec![Join {
+                                joined: HashMap::from_iter(vec![(
                                     group_identifier,
-                                    roles: vec!["owner".to_string()],
-                                    updated_at: time(),
-                                    created_at: time(),
-                                }],
-                                invites: vec![],
+                                    Join {
+                                        roles: vec!["owner".to_string()],
+                                        updated_at: time(),
+                                        created_at: time(),
+                                    },
+                                )]),
+                                invites: HashMap::new(),
                             };
 
                             let response = Data::add_entry(
@@ -1023,11 +937,7 @@ impl Store {
                         }
                         Some((_identifier, mut _member)) => {
                             // if the group identifier is already found in the joined array, throw an error
-                            if _member
-                                .joined
-                                .iter()
-                                .any(|m| &m.group_identifier == &group_identifier)
-                            {
+                            if _member.joined.get(&group_identifier).is_some() {
                                 return Err(api_error(
                                     ApiErrorType::BadRequest,
                                     "ALREADY_JOINED",
@@ -1039,12 +949,14 @@ impl Store {
                             }
 
                             // Add the group identifier to the joined array
-                            _member.joined.push(Join {
+                            _member.joined.insert(
                                 group_identifier,
-                                roles: vec!["owner".to_string()],
-                                updated_at: time(),
-                                created_at: time(),
-                            });
+                                Join {
+                                    roles: vec!["owner".to_string()],
+                                    updated_at: time(),
+                                    created_at: time(),
+                                },
+                            );
 
                             let response = Data::update_entry(data, _identifier, _member);
                             match response {
@@ -1053,7 +965,7 @@ impl Store {
                             }
                         }
                     }
-                } // 1710994309 / 100 = 17109943.09
+                }
             }
         })
     }
@@ -1069,8 +981,6 @@ impl Store {
 
             // Create the invite
             let invite = Invite {
-                group_identifier,
-                // Set the invite type to owner request
                 invite_type: InviteType::OwnerRequest,
                 updated_at: time(),
                 created_at: time(),
@@ -1082,15 +992,25 @@ impl Store {
                     let member = Member {
                         principal: member_principal,
                         profile_identifier: Principal::anonymous(),
-                        joined: vec![],
-                        invites: vec![invite],
+                        joined: HashMap::new(),
+                        invites: HashMap::from_iter(vec![(group_identifier, invite)]),
                     };
                     // Add the member to the members array
                     Data::add_entry(data, member, Some(IDENTIFIER_KIND.to_string()))
                 }
                 Some((_identifier, mut _member)) => {
+                    if _member.joined.get(&group_identifier).is_some() {
+                        return Err(api_error(
+                            ApiErrorType::BadRequest,
+                            "ALREADY_JOINED",
+                            "You are already part of this group",
+                            Data::get_name(data).as_str(),
+                            "invite_to_group",
+                            None,
+                        ));
+                    }
                     // If there is an existing member, add the invite to the invites array
-                    _member.invites.push(invite);
+                    _member.invites.insert(group_identifier, invite);
                     // Update the member
                     Data::update_entry(data, _identifier, _member)
                 }
@@ -1116,7 +1036,7 @@ impl Store {
                 let invite = _member
                     .invites
                     .iter()
-                    .find(|i| &i.group_identifier == &group_identifier);
+                    .find(|(group_identifier, _)| &group_identifier == &group_identifier);
 
                 match invite {
                     // If there is no invite, throw an error
@@ -1129,7 +1049,7 @@ impl Store {
                         None,
                     )),
                     // If there is an invite, continue
-                    Some(_invite) => {
+                    Some((_, _invite)) => {
                         // Check if the invite type is user request
                         if _invite.invite_type != InviteType::UserRequest {
                             return Err(api_error(
@@ -1143,19 +1063,17 @@ impl Store {
                         }
 
                         // Remove the invite from the invites array
-                        _member.invites = _member
-                            .invites
-                            .into_iter()
-                            .filter(|i| &i.group_identifier != &group_identifier)
-                            .collect();
+                        _member.invites.remove(&group_identifier);
 
                         // Add a new Join to the joined array
-                        _member.joined.push(Join {
+                        _member.joined.insert(
                             group_identifier,
-                            roles: vec!["member".to_string()],
-                            updated_at: time(),
-                            created_at: time(),
-                        });
+                            Join {
+                                roles: vec!["member".to_string()],
+                                updated_at: time(),
+                                created_at: time(),
+                            },
+                        );
 
                         // Update the member
                         let result =
@@ -1186,12 +1104,7 @@ impl Store {
                 // If there is a member, continue
                 Some((_identifier, mut _member)) => {
                     // Find the invite in the invites array
-                    let invite = _member
-                        .invites
-                        .iter()
-                        .find(|i| &i.group_identifier == &group_identifier);
-
-                    match invite {
+                    match _member.invites.get(&group_identifier) {
                         // If there is no invite, throw an error
                         None => Err(api_error(
                             ApiErrorType::NotFound,
@@ -1216,20 +1129,17 @@ impl Store {
                             }
 
                             // Remove the invite from the invites array
-                            _member.invites = _member
-                                .invites
-                                .iter()
-                                .filter(|i| &i.group_identifier != &group_identifier)
-                                .cloned()
-                                .collect();
+                            _member.invites.remove(&group_identifier);
 
                             // Add a new Join to the joined array
-                            _member.joined.push(Join {
-                                group_identifier,
-                                roles: vec!["member".to_string()],
-                                updated_at: time(),
-                                created_at: time(),
-                            });
+                            _member.joined.insert(
+                                group_identifier.clone(),
+                                Join {
+                                    roles: vec!["member".to_string()],
+                                    updated_at: time(),
+                                    created_at: time(),
+                                },
+                            );
                             // Update the member
                             let result = Data::update_entry(data, _identifier, _member);
 
@@ -1278,18 +1188,14 @@ impl Store {
         group_identifier: Principal,
     ) -> JoinedMemberResponse {
         let mut roles: Vec<String> = vec![];
-        let joined_group = member
-            .joined
-            .iter()
-            .find(|m| &m.group_identifier == &group_identifier);
 
-        match joined_group {
+        match member.joined.get(&group_identifier) {
             None => {}
             Some(_join) => roles = _join.roles.clone(),
         }
 
         JoinedMemberResponse {
-            group_identifier: group_identifier,
+            group_identifier,
             member_identifier: identifier.clone(),
             principal: member.principal,
             roles,
@@ -1302,16 +1208,11 @@ impl Store {
         member: &Member,
         group_identifier: Principal,
     ) -> InviteMemberResponse {
-        let invite = member
-            .invites
-            .iter()
-            .find(|m| &m.group_identifier == &group_identifier);
-
         InviteMemberResponse {
-            group_identifier: group_identifier,
+            group_identifier,
             member_identifier: identifier.clone(),
             principal: member.principal,
-            invite: invite.unwrap().clone(),
+            invite: member.invites.get(&group_identifier).unwrap().clone(),
         }
     }
 
@@ -1320,7 +1221,7 @@ impl Store {
         let members = DATA.with(|data| Data::get_entries(data));
         members
             .into_iter()
-            .find(|(_identifier, _member)| _member.principal == caller)
+            .find(|(_, _member)| _member.principal == caller)
     }
 
     // Method to get the member count for a specific group
@@ -1332,7 +1233,7 @@ impl Store {
                 member
                     .joined
                     .iter()
-                    .any(|j| &j.group_identifier == group_identifier)
+                    .any(|(_group_identifier, _)| _group_identifier == group_identifier)
             })
             .count()
     }
@@ -1572,7 +1473,7 @@ impl Store {
                 _member_data
                     .joined
                     .iter()
-                    .any(|j| &j.group_identifier == group_identifier)
+                    .any(|(_group_identifier, _)| _group_identifier == group_identifier)
             })
             // Map member to joined member response
             .map(|(_identifier, _group_data)| {
@@ -1633,7 +1534,7 @@ impl Store {
                 _member_data
                     .invites
                     .iter()
-                    .any(|j| &j.group_identifier == group_identifier)
+                    .any(|(_group_identifier, _)| _group_identifier == group_identifier)
             })
             // Map member to joined member response
             .map(|(_identifier, _group_data)| {

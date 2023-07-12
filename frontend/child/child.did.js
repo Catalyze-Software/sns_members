@@ -5,20 +5,18 @@ export const idlFactory = ({ IDL }) => {
   });
   const Invite = IDL.Record({
     'updated_at' : IDL.Nat64,
-    'group_identifier' : IDL.Principal,
     'invite_type' : InviteType,
     'created_at' : IDL.Nat64,
   });
   const Join = IDL.Record({
     'updated_at' : IDL.Nat64,
-    'group_identifier' : IDL.Principal,
     'created_at' : IDL.Nat64,
     'roles' : IDL.Vec(IDL.Text),
   });
   const Member = IDL.Record({
     'principal' : IDL.Principal,
-    'invites' : IDL.Vec(Invite),
-    'joined' : IDL.Vec(Join),
+    'invites' : IDL.Vec(IDL.Tuple(IDL.Principal, Invite)),
+    'joined' : IDL.Vec(IDL.Tuple(IDL.Principal, Join)),
     'profile_identifier' : IDL.Principal,
   });
   const ErrorMessage = IDL.Record({

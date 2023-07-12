@@ -54,7 +54,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const Invite = IDL.Record({
     'updated_at' : IDL.Nat64,
-    'group_identifier' : IDL.Principal,
     'invite_type' : InviteType,
     'created_at' : IDL.Nat64,
   });

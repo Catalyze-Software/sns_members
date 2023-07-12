@@ -1,12 +1,15 @@
+use std::collections::HashMap;
+
 use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 
+pub type GroupIdentifier = Principal;
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct Member {
     pub principal: Principal,
     pub profile_identifier: Principal,
-    pub joined: Vec<Join>,
-    pub invites: Vec<Invite>,
+    pub joined: HashMap<GroupIdentifier, Join>,
+    pub invites: HashMap<GroupIdentifier, Invite>,
 }
 
 impl Default for Member {
@@ -14,15 +17,14 @@ impl Default for Member {
         Self {
             principal: Principal::anonymous(),
             profile_identifier: Principal::anonymous(),
-            joined: Vec::default(),
-            invites: Vec::default(),
+            joined: Default::default(),
+            invites: Default::default(),
         }
     }
 }
 
 #[derive(CandidType, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Join {
-    pub group_identifier: Principal,
     pub roles: Vec<String>,
     pub updated_at: u64,
     pub created_at: u64,
@@ -30,7 +32,6 @@ pub struct Join {
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct Invite {
-    pub group_identifier: Principal,
     pub invite_type: InviteType,
     pub updated_at: u64,
     pub created_at: u64,

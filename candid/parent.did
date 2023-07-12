@@ -36,7 +36,6 @@ type HttpResponse = record {
 };
 type Invite = record {
   updated_at : nat64;
-  group_identifier : principal;
   invite_type : InviteType;
   created_at : nat64;
 };

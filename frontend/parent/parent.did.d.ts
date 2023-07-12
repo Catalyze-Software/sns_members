@@ -35,7 +35,6 @@ export interface HttpResponse {
 }
 export interface Invite {
   'updated_at' : bigint,
-  'group_identifier' : Principal,
   'invite_type' : InviteType,
   'created_at' : bigint,
 }
