@@ -102,4 +102,5 @@ service : (principal, text, nat64) -> {
   remove_member_from_group : (principal, principal) -> (Result_1);
   remove_member_invite_from_group : (principal, principal) -> (Result_1);
   remove_role : (text, principal, principal) -> (Result_3);
+  set_roles : (vec text, principal, principal) -> (Result_3);
 }

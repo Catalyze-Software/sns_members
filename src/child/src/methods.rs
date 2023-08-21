@@ -119,6 +119,20 @@ async fn remove_role(
     }
 }
 
+// Method to assign a role to a specific group member
+#[update]
+#[candid_method(update)]
+async fn set_roles(
+    roles: Vec<String>,
+    member_identifier: Principal,
+    group_identifier: Principal,
+) -> Result<(), ()> {
+    match Store::can_write_member(caller(), group_identifier).await {
+        Ok(_) => Store::set_roles(roles, member_identifier, group_identifier),
+        Err(_) => Err(()),
+    }
+}
+
 // Method to fetch a specific group member by user principal
 #[query]
 #[candid_method(query)]

@@ -131,4 +131,5 @@ export interface _SERVICE {
     Result_1
   >,
   'remove_role' : ActorMethod<[string, Principal, Principal], Result_3>,
+  'set_roles' : ActorMethod<[Array<string>, Principal, Principal], Result_3>,
 }

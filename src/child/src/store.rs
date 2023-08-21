@@ -285,6 +285,40 @@ impl Store {
         }
     }
 
+    // Method to assign a group role to a member
+    pub fn set_roles(
+        roles: Vec<String>,
+        member_identifier: Principal,
+        group_identifier: Principal,
+    ) -> Result<(), ()> {
+        // Get the existing member
+        let member = DATA.with(|data| Data::get_entry(data, member_identifier));
+
+        if let Ok((_identifier, mut _member)) = member {
+            // Get the existing roles for the group
+            if let Some(_joined) = _member.joined.get(&group_identifier) {
+                match _member.joined.get_mut(&group_identifier) {
+                    Some(_join) => {
+                        _join.roles = roles;
+                        _join.updated_at = time();
+                    }
+                    None => {
+                        let join = Join {
+                            roles,
+                            updated_at: time(),
+                            created_at: time(),
+                        };
+                        _member.joined.insert(group_identifier, join);
+                    }
+                }
+                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
     // method to remove a role from a member
     pub fn remove_role(
         role: String,

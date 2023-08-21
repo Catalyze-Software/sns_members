@@ -179,6 +179,11 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'set_roles' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Principal, IDL.Principal],
+        [Result_3],
+        [],
+      ),
   });
 };
 export const init = ({ IDL }) => {
