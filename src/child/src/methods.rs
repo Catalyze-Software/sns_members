@@ -1,8 +1,7 @@
 use std::{collections::HashMap, iter::FromIterator};
 
-use candid::{candid_method, Principal};
-use ic_cdk::caller;
-use ic_cdk_macros::{query, update};
+use candid::Principal;
+use ic_cdk::{caller, query, update};
 use ic_scalable_misc::enums::api_error_type::ApiError;
 
 use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member};
@@ -12,7 +11,6 @@ use crate::store::DATA;
 use super::store::Store;
 
 #[update]
-#[candid_method(update)]
 pub fn migration_add_members(members: Vec<(Principal, Member)>) -> () {
     if caller()
         == Principal::from_text("ledm3-52ncq-rffuv-6ed44-hg5uo-iicyu-pwkzj-syfva-heo4k-p7itq-aqe")
@@ -28,7 +26,6 @@ pub fn migration_add_members(members: Vec<(Principal, Member)>) -> () {
 // This method is used to join an existing group
 // The method is async because checks if the group exists and optionally creates a new canister
 #[update]
-#[candid_method(update)]
 async fn join_group(
     group_identifier: Principal,
     account_identifier: Option<String>,
@@ -38,7 +35,6 @@ async fn join_group(
 
 // This method is used to create an empty member when a profile is created (inter-canister call)
 #[update]
-#[candid_method(update)]
 async fn create_empty_member(
     caller: Principal,
     profile_identifier: Principal,
@@ -48,7 +44,6 @@ async fn create_empty_member(
 
 // This method is used to invite a user to a group
 #[update]
-#[candid_method(update)]
 async fn invite_to_group(
     member_principal: Principal,
     group_identifier: Principal,
@@ -61,7 +56,6 @@ async fn invite_to_group(
 
 // This method is used to accept an invite to a group as a admin
 #[update]
-#[candid_method(update)]
 async fn accept_user_request_group_invite(
     member_principal: Principal,
     group_identifier: Principal,
@@ -74,7 +68,6 @@ async fn accept_user_request_group_invite(
 
 // This method is used to accept an invite to a group as a user
 #[update]
-#[candid_method(update)]
 async fn accept_owner_request_group_invite(
     group_identifier: Principal,
 ) -> Result<(Principal, Member), ApiError> {
@@ -83,7 +76,6 @@ async fn accept_owner_request_group_invite(
 
 // This method is used a to add an owner to the member entry when a group is created (inter-canister call)
 #[update]
-#[candid_method(update)]
 async fn add_owner(
     owner_principal: Principal,
     group_identifier: Principal,
@@ -93,7 +85,6 @@ async fn add_owner(
 
 // Method to assign a role to a specific group member
 #[update]
-#[candid_method(update)]
 async fn assign_role(
     role: String,
     member_identifier: Principal,
@@ -107,7 +98,6 @@ async fn assign_role(
 
 // Method to remove a role from a specific group member
 #[update]
-#[candid_method(update)]
 async fn remove_role(
     role: String,
     member_identifier: Principal,
@@ -121,7 +111,6 @@ async fn remove_role(
 
 // Method to assign a role to a specific group member
 #[update]
-#[candid_method(update)]
 async fn set_roles(
     roles: Vec<String>,
     member_identifier: Principal,
@@ -135,7 +124,6 @@ async fn set_roles(
 
 // Method to fetch a specific group member by user principal
 #[query]
-#[candid_method(query)]
 fn get_group_member(
     principal: Principal,
     group_identifier: Principal,
@@ -145,42 +133,36 @@ fn get_group_member(
 
 // Method to get the amount of members of specific groups
 #[query]
-#[candid_method(query)]
 fn get_group_members_count(group_identifiers: Vec<Principal>) -> Vec<(Principal, usize)> {
     Store::get_group_members_count(group_identifiers)
 }
 
 // Method to get the groups specific members are member of
 #[query]
-#[candid_method(query)]
 fn get_groups_for_members(member_identifiers: Vec<Principal>) -> Vec<(Principal, Vec<Principal>)> {
     Store::get_groups_for_members(member_identifiers)
 }
 
 // Method to get the amount of invites of specific groups
 #[query]
-#[candid_method(query)]
 fn get_group_invites_count(group_identifiers: Vec<Principal>) -> Vec<(Principal, usize)> {
     Store::get_group_invites_count(group_identifiers)
 }
 
 // Method to get all members of a specific group
 #[query]
-#[candid_method(query)]
 fn get_group_members(group_identifier: Principal) -> Result<Vec<JoinedMemberResponse>, ApiError> {
     Ok(Store::get_group_members(group_identifier))
 }
 
 // Method to get the caller member entry
 #[query]
-#[candid_method(query)]
 fn get_self() -> Result<(Principal, Member), ApiError> {
     Store::get_self(caller())
 }
 
 // Get the roles of a specific member within a specific group
 #[query]
-#[candid_method(query)]
 fn get_member_roles(
     member_identifier: Principal,
     group_identifier: Principal,
@@ -190,21 +172,18 @@ fn get_member_roles(
 
 // Method to let the caller leave a group
 #[update]
-#[candid_method(update)]
 fn leave_group(group_identifier: Principal) -> Result<(), ApiError> {
     Store::leave_group(caller(), group_identifier)
 }
 
 // Method to remove an outstanding invite for a group as a user
 #[update]
-#[candid_method(update)]
 fn remove_invite(group_identifier: Principal) -> Result<(), ApiError> {
     Store::remove_invite(caller(), group_identifier)
 }
 
 // Method to remove a member from a group
 #[update]
-#[candid_method(update)]
 async fn remove_member_from_group(
     principal: Principal,
     group_identifier: Principal,
@@ -217,7 +196,6 @@ async fn remove_member_from_group(
 
 // Method to remove an outstanding invite for a group as a admin
 #[update]
-#[candid_method(update)]
 async fn remove_member_invite_from_group(
     principal: Principal,
     group_identifier: Principal,
@@ -230,7 +208,6 @@ async fn remove_member_invite_from_group(
 
 // Method to get all group invites
 #[update]
-#[candid_method(update)]
 async fn get_group_invites(
     group_identifier: Principal,
 ) -> Result<Vec<InviteMemberResponse>, ApiError> {
@@ -245,7 +222,6 @@ async fn get_group_invites(
 // Data serialized and send as byte array chunks ` (bytes, (start_chunk, end_chunk)) `
 // The parent canister can then deserialize the data and pass it to the frontend
 #[query]
-#[candid_method(query)]
 fn get_chunked_join_data(
     group_identifier: Principal,
     chunk: usize,
@@ -263,7 +239,6 @@ fn get_chunked_join_data(
 // Data serialized and send as byte array chunks ` (bytes, (start_chunk, end_chunk)) `
 // The parent canister can then deserialize the data and pass it to the frontend
 #[query]
-#[candid_method(query)]
 fn get_chunked_invite_data(
     group_identifier: Principal,
     chunk: usize,
