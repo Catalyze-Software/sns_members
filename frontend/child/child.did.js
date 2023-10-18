@@ -148,6 +148,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Principal)))],
         ['query'],
       ),
+    'get_member' : IDL.Func([IDL.Principal], [IDL.Opt(Member)], ['query']),
     'get_member_roles' : IDL.Func(
         [IDL.Principal, IDL.Principal],
         [Result_7],
@@ -158,6 +159,7 @@ export const idlFactory = ({ IDL }) => {
     'invite_to_group' : IDL.Func([IDL.Principal, IDL.Principal], [Result], []),
     'join_group' : IDL.Func([IDL.Principal, IDL.Opt(IDL.Text)], [Result], []),
     'leave_group' : IDL.Func([IDL.Principal], [Result_1], []),
+    'migrate_to_stable' : IDL.Func([], [], []),
     'migration_add_members' : IDL.Func(
         [IDL.Vec(IDL.Tuple(IDL.Principal, Member))],
         [],

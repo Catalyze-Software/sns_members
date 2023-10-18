@@ -91,12 +91,14 @@ service : (principal, text, nat64) -> {
   get_groups_for_members : (vec principal) -> (
       vec record { principal; vec principal },
     ) query;
+  get_member : (principal) -> (opt Member) query;
   get_member_roles : (principal, principal) -> (Result_7) query;
   get_self : () -> (Result) query;
   http_request : (HttpRequest) -> (HttpResponse) query;
   invite_to_group : (principal, principal) -> (Result);
   join_group : (principal, opt text) -> (Result);
   leave_group : (principal) -> (Result_1);
+  migrate_to_stable : () -> ();
   migration_add_members : (vec record { principal; Member }) -> ();
   remove_invite : (principal) -> (Result_1);
   remove_member_from_group : (principal, principal) -> (Result_1);

@@ -114,12 +114,14 @@ export interface _SERVICE {
     [Array<Principal>],
     Array<[Principal, Array<Principal>]>
   >,
+  'get_member' : ActorMethod<[Principal], [] | [Member]>,
   'get_member_roles' : ActorMethod<[Principal, Principal], Result_7>,
   'get_self' : ActorMethod<[], Result>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
   'join_group' : ActorMethod<[Principal, [] | [string]], Result>,
   'leave_group' : ActorMethod<[Principal], Result_1>,
+  'migrate_to_stable' : ActorMethod<[], undefined>,
   'migration_add_members' : ActorMethod<
     [Array<[Principal, Member]>],
     undefined

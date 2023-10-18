@@ -47,14 +47,14 @@ thread_local! {
         // NEW STABLE
         pub static STABLE_DATA: RefCell<StableCell<Data, Memory>> = RefCell::new(
             StableCell::init(
-                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
+                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1))),
                 Data::default(),
             ).expect("failed")
         );
 
         pub static ENTRIES: RefCell<StableBTreeMap<String, Member, Memory>> = RefCell::new(
             StableBTreeMap::init(
-                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4))),
+                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))),
             )
         );
 
@@ -345,34 +345,33 @@ impl Store {
         member_identifier: Principal,
         group_identifier: Principal,
     ) -> Result<(), ()> {
-        // Get the existing member
-        let member = STABLE_DATA
-            .with(|data| ENTRIES.with(|entries| Data::get_entry(data, entries, member_identifier)));
-
-        if let Ok((_identifier, mut _member)) = member {
-            // Get the existing roles for the group
-            if let Some(_joined) = _member.joined.get(&group_identifier) {
-                match _member.joined.get_mut(&group_identifier) {
-                    Some(_join) => {
-                        _join.roles = roles;
-                        _join.updated_at = time();
+        match ENTRIES.with(|entries| entries.borrow().get(&member_identifier.to_string())) {
+            Some(mut _member) => {
+                // Get the existing roles for the group
+                if let Some(_joined) = _member.joined.get(&group_identifier) {
+                    match _member.joined.get_mut(&group_identifier) {
+                        Some(_join) => {
+                            _join.roles = roles;
+                            _join.updated_at = time();
+                        }
+                        None => {
+                            let join = Join {
+                                roles,
+                                updated_at: time(),
+                                created_at: time(),
+                            };
+                            _member.joined.insert(group_identifier, join);
+                        }
                     }
-                    None => {
-                        let join = Join {
-                            roles,
-                            updated_at: time(),
-                            created_at: time(),
-                        };
-                        _member.joined.insert(group_identifier, join);
-                    }
+                    let _ = STABLE_DATA.with(|data| {
+                        ENTRIES.with(|entries| {
+                            Data::update_entry(data, entries, member_identifier, _member)
+                        })
+                    });
                 }
-                let _ = STABLE_DATA.with(|data| {
-                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
-                });
+                Ok(())
             }
-            Ok(())
-        } else {
-            Err(())
+            None => Err(()),
         }
     }
 
@@ -882,7 +881,7 @@ impl Store {
             // Filter the members that are in the group
             members
                 .iter()
-                .filter(|(_, _member)| _member.joined.get(&group_identifier).is_some())
+                .filter(|(_, _member)| _member.joined.contains_key(&group_identifier))
                 .map(|(_identifier, _member)| {
                     Self::map_member_to_joined_member_response(
                         &Principal::from_text(_identifier).unwrap_or(Principal::anonymous()),

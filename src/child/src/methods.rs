@@ -6,7 +6,7 @@ use ic_scalable_misc::enums::api_error_type::ApiError;
 
 use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member};
 
-use crate::store::DATA;
+use crate::store::{DATA, ENTRIES};
 
 use super::store::Store;
 
@@ -107,6 +107,11 @@ async fn remove_role(
         Ok(_) => Store::remove_role(role, member_identifier, group_identifier),
         Err(_) => Err(()),
     }
+}
+
+#[query]
+fn get_member(member_identifier: Principal) -> Option<Member> {
+    ENTRIES.with(|entries| entries.borrow().get(&member_identifier.to_string()))
 }
 
 // Method to assign a role to a specific group member
