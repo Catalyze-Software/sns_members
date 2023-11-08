@@ -126,6 +126,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Nat8), IDL.Tuple(IDL.Nat64, IDL.Nat64)],
         ['query'],
       ),
+    'get_data' : IDL.Func(
+        [IDL.Nat64, IDL.Nat64],
+        [IDL.Nat64, IDL.Vec(IDL.Nat8)],
+        ['query'],
+      ),
     'get_group_invites' : IDL.Func([IDL.Principal], [Result_4], []),
     'get_group_invites_count' : IDL.Func(
         [IDL.Vec(IDL.Principal)],

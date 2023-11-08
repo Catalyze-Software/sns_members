@@ -78,3 +78,15 @@ pub fn candid() {
     use ic_scalable_misc::helpers::candid_helper::save_candid;
     save_candid(__export_did_tmp_(), String::from("child"));
 }
+
+#[query]
+#[candid_method(query)]
+pub fn get_data(start: usize, end: usize) -> (usize, Vec<u8>) {
+    let mut state_bytes = vec![];
+    DATA.with(|data| {
+        ciborium::ser::into_writer(&*data.borrow(), &mut state_bytes)
+            .expect("failed to encode state")
+    });
+
+    (state_bytes.len(), state_bytes[start..end].to_vec())
+}

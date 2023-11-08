@@ -226,6 +226,7 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "candid",
+ "ciborium",
  "ic-cdk",
  "ic-cdk-macros",
  "ic_scalable_canister",
@@ -248,6 +249,33 @@ dependencies = [
  "time",
  "wasm-bindgen",
  "winapi",
+]
+
+[[package]]
+name = "ciborium"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
+dependencies = [
+ "ciborium-io",
+ "half",
 ]
 
 [[package]]
@@ -686,9 +714,9 @@ checksum = "978b91fc78de9d2eb0144db717839cde3b35470199ea51aca362cb6310e93dfd"
 
 [[package]]
 name = "ic_scalable_canister"
-version = "0.2.73"
+version = "0.2.731"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e24ab6a5994c702b112afe922ef79837c37e65a2b75843e210e29989648953f3"
+checksum = "b85f7fb152176a06b7ee53c0dd10b7b3ce07d35834e9328036f62932b4830fe1"
 dependencies = [
  "candid",
  "ic-cdk",

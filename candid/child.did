@@ -79,6 +79,7 @@ service : (principal, text, nat64) -> {
       vec nat8,
       record { nat64; nat64 },
     ) query;
+  get_data : (nat64, nat64) -> (nat64, vec nat8) query;
   get_group_invites : (principal) -> (Result_4);
   get_group_invites_count : (vec principal) -> (
       vec record { principal; nat64 },

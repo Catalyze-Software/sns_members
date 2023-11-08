@@ -99,6 +99,7 @@ export interface _SERVICE {
     [Principal, bigint, bigint],
     [Uint8Array | number[], [bigint, bigint]]
   >,
+  'get_data' : ActorMethod<[bigint, bigint], [bigint, Uint8Array | number[]]>,
   'get_group_invites' : ActorMethod<[Principal], Result_4>,
   'get_group_invites_count' : ActorMethod<
     [Array<Principal>],
