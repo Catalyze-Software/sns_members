@@ -183,7 +183,6 @@ dependencies = [
  "ic-cdk 0.11.0",
  "ic-stable-structures",
  "ic_scalable_canister",
- "ic_scalable_misc",
  "serde",
  "serde_json",
  "shared",
@@ -619,9 +618,9 @@ checksum = "16efdbe5d9b0ea368da50aedbf7640a054139569236f1a5249deb5fd9af5a5d5"
 
 [[package]]
 name = "ic_scalable_canister"
-version = "0.3.0-beta.7"
+version = "0.3.0-beta.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aea3011bd1a2681a45cfafb66d1884bddca275912a098f1e21aac9b321beca6"
+checksum = "f716833e5eebd900236e9aef0d401281ca30b1d86462ec773ed1a196449d33c6"
 dependencies = [
  "candid",
  "ciborium",
@@ -635,9 +634,9 @@ dependencies = [
 
 [[package]]
 name = "ic_scalable_misc"
-version = "1.0.1-beta.2"
+version = "1.0.1-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "042124050564b29fe56bea1471ce2779bd44efe61e7154a2b3c10e57b4eb1d63"
+checksum = "80375abd42217b82f73824a30f9092bfa10dded272deb10b5ee85cade8a2ad3f"
 dependencies = [
  "base64",
  "bincode",

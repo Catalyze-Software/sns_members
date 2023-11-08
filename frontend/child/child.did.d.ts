@@ -58,6 +58,9 @@ export interface Member {
   'joined' : Array<[Principal, Join]>,
   'profile_identifier' : Principal,
 }
+export type MemberGroupStatus = { 'None' : null } |
+  { 'Joined' : Array<string> } |
+  { 'Invite' : string };
 export type Result = { 'Ok' : [Principal, Member] } |
   { 'Err' : ApiError };
 export type Result_1 = { 'Ok' : null } |
@@ -115,6 +118,10 @@ export interface _SERVICE {
     Array<[Principal, Array<Principal>]>
   >,
   'get_member' : ActorMethod<[Principal], [] | [Member]>,
+  'get_member_group_status' : ActorMethod<
+    [Principal, Array<Principal>],
+    Array<[Principal, MemberGroupStatus]>
+  >,
   'get_member_roles' : ActorMethod<[Principal, Principal], Result_7>,
   'get_self' : ActorMethod<[], Result>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,

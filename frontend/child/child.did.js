@@ -75,6 +75,11 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Vec(JoinedMemberResponse),
     'Err' : ApiError,
   });
+  const MemberGroupStatus = IDL.Variant({
+    'None' : IDL.Null,
+    'Joined' : IDL.Vec(IDL.Text),
+    'Invite' : IDL.Text,
+  });
   const Result_7 = IDL.Variant({
     'Ok' : IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Text)),
     'Err' : IDL.Text,
@@ -149,6 +154,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_member' : IDL.Func([IDL.Principal], [IDL.Opt(Member)], ['query']),
+    'get_member_group_status' : IDL.Func(
+        [IDL.Principal, IDL.Vec(IDL.Principal)],
+        [IDL.Vec(IDL.Tuple(IDL.Principal, MemberGroupStatus))],
+        ['query'],
+      ),
     'get_member_roles' : IDL.Func(
         [IDL.Principal, IDL.Principal],
         [Result_7],

@@ -5,8 +5,7 @@ use ic_cdk::{
     api::{call, time},
     id,
 };
-use ic_scalable_canister::store::Data;
-use ic_scalable_misc::{
+use ic_scalable_canister::ic_scalable_misc::{
     enums::{
         api_error_type::{ApiError, ApiErrorType},
         privacy_type::{GatedType, NeuronGatedRules, Privacy, TokenGated},
@@ -25,9 +24,10 @@ use ic_scalable_misc::{
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
+use ic_scalable_canister::store::Data;
 
 use shared::member_model::{
-    Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member,
+    Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member, MemberGroupStatus,
 };
 
 use ic_stable_structures::{
@@ -58,7 +58,7 @@ thread_local! {
             )
         );
 
-    pub static DATA: RefCell<ic_scalable_misc::models::original_data::Data<Member>>  = RefCell::new(ic_scalable_misc::models::original_data::Data::default());
+    pub static DATA: RefCell<ic_scalable_canister::ic_scalable_misc::models::original_data::Data<Member>>  = RefCell::new(ic_scalable_canister::ic_scalable_misc::models::original_data::Data::default());
 }
 
 pub struct Store;
@@ -1719,5 +1719,52 @@ impl Store {
             // if the groups cant be serialized return an empty vec and start and end chunk index as 0
             return (vec![], (0, 0));
         }
+    }
+
+    pub fn get_member_group_status(
+        caller: Principal,
+        group_identifiers: Vec<Principal>,
+    ) -> Vec<(Principal, MemberGroupStatus)> {
+        let mut member_group_status: Vec<(Principal, MemberGroupStatus)> = vec![];
+
+        let member = Self::_get_member_from_caller(caller.clone());
+        for group_identifier in group_identifiers {
+            match &member {
+                // If the member exists, continue
+                Some((_identifier, _member)) => {
+                    let join = _member.joined.get(&group_identifier);
+                    let invite = _member.invites.get(&group_identifier);
+
+                    match join {
+                        // If the member does not exist in the group, return an empty array
+                        None => match invite {
+                            None => {}
+                            Some(_invite) => match _invite.invite_type {
+                                InviteType::OwnerRequest => {
+                                    member_group_status.push((
+                                        group_identifier,
+                                        MemberGroupStatus::Invite("owner_request".to_string()),
+                                    ));
+                                }
+                                InviteType::UserRequest => {
+                                    member_group_status.push((
+                                        group_identifier,
+                                        MemberGroupStatus::Invite("user_request".to_string()),
+                                    ));
+                                }
+                            },
+                        },
+                        Some(_join) => {
+                            member_group_status.push((
+                                group_identifier,
+                                MemberGroupStatus::Joined(_join.roles.clone()),
+                            ));
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+        member_group_status
     }
 }

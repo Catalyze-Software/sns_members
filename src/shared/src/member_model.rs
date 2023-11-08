@@ -80,3 +80,16 @@ pub struct InviteMemberResponse {
     pub principal: Principal,
     pub invite: Invite,
 }
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub enum MemberGroupStatus {
+    None,
+    Joined(Vec<String>),
+    Invite(String),
+}
+
+impl Default for MemberGroupStatus {
+    fn default() -> Self {
+        MemberGroupStatus::None
+    }
+}

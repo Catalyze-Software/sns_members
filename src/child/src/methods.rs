@@ -2,9 +2,9 @@ use std::{collections::HashMap, iter::FromIterator};
 
 use candid::Principal;
 use ic_cdk::{caller, query, update};
-use ic_scalable_misc::enums::api_error_type::ApiError;
+use ic_scalable_canister::ic_scalable_misc::enums::api_error_type::ApiError;
 
-use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member};
+use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member, MemberGroupStatus};
 
 use crate::store::{DATA, ENTRIES};
 
@@ -254,4 +254,13 @@ fn get_chunked_invite_data(
     }
 
     Store::get_chunked_invite_data(&group_identifier, chunk, max_bytes_per_chunk)
+}
+
+// COMPOSITE_QUERY TESTING
+#[query]
+pub fn get_member_group_status(
+    caller: Principal,
+    group_identifiers: Vec<Principal>,
+) -> Vec<(Principal, MemberGroupStatus)> {
+    Store::get_member_group_status(caller, group_identifiers)
 }
