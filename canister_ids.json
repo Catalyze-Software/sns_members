@@ -1,8 +1,12 @@
 {
-  "parent": {
-    "ic": "7c6qj-wyaaa-aaaap-abgha-cai"
-  },
   "child": {
-    "ic": "aaaaa-aa"
+    "development": "aaaaa-aa",
+    "ic": "aaaaa-aa",
+    "staging": "aaaaa-aa"
+  },
+  "parent": {
+    "development": "d4avb-3iaaa-aaaap-abqra-cai",
+    "ic": "7c6qj-wyaaa-aaaap-abgha-cai",
+    "staging": "7c6qj-wyaaa-aaaap-abgha-cai"
   }
 }
