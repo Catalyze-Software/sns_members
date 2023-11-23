@@ -90,7 +90,11 @@ export interface _SERVICE {
   'add_entry_by_parent' : ActorMethod<[Uint8Array | number[]], Result_1>,
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
+  'backup_data' : ActorMethod<[], string>,
+  'clear_backup' : ActorMethod<[], undefined>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
+  'download_chunk' : ActorMethod<[bigint], [bigint, Uint8Array | number[]]>,
+  'finalize_upload' : ActorMethod<[], string>,
   'get_chunked_invite_data' : ActorMethod<
     [Principal, bigint, bigint],
     [Uint8Array | number[], [bigint, bigint]]
@@ -131,5 +135,8 @@ export interface _SERVICE {
     Result_1
   >,
   'remove_role' : ActorMethod<[string, Principal, Principal], Result_3>,
+  'restore_data' : ActorMethod<[], undefined>,
   'set_roles' : ActorMethod<[Array<string>, Principal, Principal], Result_3>,
+  'total_chunks' : ActorMethod<[], bigint>,
+  'upload_chunk' : ActorMethod<[[bigint, Uint8Array | number[]]], undefined>,
 }
