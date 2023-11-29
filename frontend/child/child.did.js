@@ -111,10 +111,16 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'backup_data' : IDL.Func([], [IDL.Text], []),
     'create_empty_member' : IDL.Func(
         [IDL.Principal, IDL.Principal],
         [Result_2],
         [],
+      ),
+    'download_chunk' : IDL.Func(
+        [IDL.Nat64],
+        [IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Nat8))],
+        ['query'],
       ),
     'get_chunked_invite_data' : IDL.Func(
         [IDL.Principal, IDL.Nat64, IDL.Nat64],
@@ -179,6 +185,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'total_chunks' : IDL.Func([], [IDL.Nat64], ['query']),
   });
 };
 export const init = ({ IDL }) => {
