@@ -111,7 +111,6 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
-    'backup_data' : IDL.Func([], [IDL.Text], []),
     'clear_backup' : IDL.Func([], [], []),
     'create_empty_member' : IDL.Func(
         [IDL.Principal, IDL.Principal],
@@ -167,12 +166,6 @@ export const idlFactory = ({ IDL }) => {
     'invite_to_group' : IDL.Func([IDL.Principal, IDL.Principal], [Result], []),
     'join_group' : IDL.Func([IDL.Principal, IDL.Opt(IDL.Text)], [Result], []),
     'leave_group' : IDL.Func([IDL.Principal], [Result_1], []),
-    'migrate_to_stable' : IDL.Func([], [], []),
-    'migration_add_members' : IDL.Func(
-        [IDL.Vec(IDL.Tuple(IDL.Principal, Member))],
-        [],
-        [],
-      ),
     'remove_invite' : IDL.Func([IDL.Principal], [Result_1], []),
     'remove_member_from_group' : IDL.Func(
         [IDL.Principal, IDL.Principal],

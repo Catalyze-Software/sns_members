@@ -90,7 +90,6 @@ export interface _SERVICE {
   'add_entry_by_parent' : ActorMethod<[Uint8Array | number[]], Result_1>,
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
-  'backup_data' : ActorMethod<[], string>,
   'clear_backup' : ActorMethod<[], undefined>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
   'download_chunk' : ActorMethod<[bigint], [bigint, Uint8Array | number[]]>,
@@ -125,11 +124,6 @@ export interface _SERVICE {
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
   'join_group' : ActorMethod<[Principal, [] | [string]], Result>,
   'leave_group' : ActorMethod<[Principal], Result_1>,
-  'migrate_to_stable' : ActorMethod<[], undefined>,
-  'migration_add_members' : ActorMethod<
-    [Array<[Principal, Member]>],
-    undefined
-  >,
   'remove_invite' : ActorMethod<[Principal], Result_1>,
   'remove_member_from_group' : ActorMethod<[Principal, Principal], Result_1>,
   'remove_member_invite_from_group' : ActorMethod<

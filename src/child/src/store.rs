@@ -5,8 +5,7 @@ use ic_cdk::{
     api::{call, time},
     id,
 };
-use ic_scalable_canister::store::Data;
-use ic_scalable_misc::{
+use ic_scalable_canister::ic_scalable_misc::{
     enums::{
         api_error_type::{ApiError, ApiErrorType},
         privacy_type::{GatedType, NeuronGatedRules, Privacy, TokenGated},
@@ -25,6 +24,7 @@ use ic_scalable_misc::{
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
+use ic_scalable_canister::store::Data;
 
 use shared::member_model::{
     Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member,
@@ -39,6 +39,8 @@ use crate::IDENTIFIER_KIND;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
+pub static DATA_MEMORY_ID: MemoryId = MemoryId::new(0);
+pub static ENTRIES_MEMORY_ID: MemoryId = MemoryId::new(1);
 thread_local! {
     pub static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -47,18 +49,16 @@ thread_local! {
         // NEW STABLE
         pub static STABLE_DATA: RefCell<StableCell<Data, Memory>> = RefCell::new(
             StableCell::init(
-                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1))),
+                MEMORY_MANAGER.with(|m| m.borrow().get(DATA_MEMORY_ID)),
                 Data::default(),
             ).expect("failed")
         );
 
         pub static ENTRIES: RefCell<StableBTreeMap<String, Member, Memory>> = RefCell::new(
             StableBTreeMap::init(
-                MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))),
+                MEMORY_MANAGER.with(|m| m.borrow().get(ENTRIES_MEMORY_ID)),
             )
         );
-
-    pub static DATA: RefCell<ic_scalable_misc::models::original_data::Data<Member>>  = RefCell::new(ic_scalable_misc::models::original_data::Data::default());
 }
 
 pub struct Store;
@@ -274,7 +274,8 @@ impl Store {
                 let _ = STABLE_DATA.with(|data| {
                     ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
                 });
-                Ok(Self::update_member_count_on_group(&group_identifier))
+                Self::update_member_count_on_group(group_identifier);
+                Ok(())
             }
         }
     }
@@ -436,7 +437,8 @@ impl Store {
                                 Data::update_entry(data, entries, _identifier, _member)
                             })
                         });
-                        Ok(Self::update_member_count_on_group(&group_identifier))
+                        let _ = Self::update_member_count_on_group(group_identifier);
+                        Ok(())
                     }
                 }
                 // If the member is not an owner, throw an error
