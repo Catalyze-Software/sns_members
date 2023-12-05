@@ -162,7 +162,7 @@ impl Store {
                                 })
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             match result {
                                 // The group was not added to the data store because the canister is at capacity
                                 Err(err) => match err {
@@ -188,7 +188,7 @@ impl Store {
                                 })
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             result
                         }
                     },
@@ -1204,7 +1204,7 @@ impl Store {
                         });
 
                         // Update the member count on the group canister (inter-canister call)
-                        Self::update_member_count_on_group(&group_identifier);
+                        ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                         result
                     }
                 }
@@ -1270,7 +1270,7 @@ impl Store {
                             });
 
                             // Update the member count on the group canister (inter-canister call)
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             result
                         }
                     }
@@ -1388,7 +1388,7 @@ impl Store {
     // [fire and forget]
     // Method to update the member count on the group canister (inter-canister call)
     #[allow(unused_must_use)]
-    fn update_member_count_on_group(group_identifier: &Principal) -> () {
+    async fn update_member_count_on_group(group_identifier: Principal) -> () {
         // Get the member count for the group
         let group_member_count_array =
             Self::get_group_members_count(vec![group_identifier.clone()]);
@@ -1399,13 +1399,14 @@ impl Store {
             count = group_member_count_array[0].1;
         };
 
-        let (_, group_canister, _) = Identifier::decode(group_identifier);
+        let (_, group_canister, _) = Identifier::decode(&group_identifier);
         // Call the update_member_count method on the group canister and send the total amount of members of the group with it
         call::call::<(Principal, Principal, usize), ()>(
             group_canister,
             "update_member_count",
-            (group_identifier.clone(), id(), count),
-        );
+            (group_identifier, id(), count),
+        )
+        .await;
     }
 
     // Method to check if a member has a specific permission
