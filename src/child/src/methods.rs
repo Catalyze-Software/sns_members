@@ -94,11 +94,6 @@ async fn remove_role(
     }
 }
 
-#[query]
-fn get_member(member_identifier: Principal) -> Option<Member> {
-    ENTRIES.with(|entries| entries.borrow().get(&member_identifier.to_string()))
-}
-
 // Method to assign a role to a specific group member
 #[update]
 async fn set_roles(

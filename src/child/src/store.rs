@@ -274,7 +274,7 @@ impl Store {
                 let _ = STABLE_DATA.with(|data| {
                     ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
                 });
-                Self::update_member_count_on_group(group_identifier);
+                let _ = Self::update_member_count_on_group(group_identifier);
                 Ok(())
             }
         }
