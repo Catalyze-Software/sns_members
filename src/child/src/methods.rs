@@ -4,7 +4,7 @@ use ic_scalable_canister::ic_scalable_misc::enums::api_error_type::ApiError;
 
 use shared::member_model::{InviteMemberResponse, JoinedMemberResponse, Member};
 
-use crate::store::{ENTRIES, STABLE_DATA};
+use crate::store::STABLE_DATA;
 
 use super::store::Store;
 
