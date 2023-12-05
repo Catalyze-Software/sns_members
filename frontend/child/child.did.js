@@ -155,7 +155,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Principal)))],
         ['query'],
       ),
-    'get_member' : IDL.Func([IDL.Principal], [IDL.Opt(Member)], ['query']),
     'get_member_roles' : IDL.Func(
         [IDL.Principal, IDL.Principal],
         [Result_7],

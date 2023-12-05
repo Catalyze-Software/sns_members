@@ -117,7 +117,6 @@ export interface _SERVICE {
     [Array<Principal>],
     Array<[Principal, Array<Principal>]>
   >,
-  'get_member' : ActorMethod<[Principal], [] | [Member]>,
   'get_member_roles' : ActorMethod<[Principal, Principal], Result_7>,
   'get_self' : ActorMethod<[], Result>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
