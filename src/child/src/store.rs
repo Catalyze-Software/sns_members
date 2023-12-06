@@ -274,7 +274,7 @@ impl Store {
                 let _ = STABLE_DATA.with(|data| {
                     ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
                 });
-                let _ = Self::update_member_count_on_group(group_identifier);
+                ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                 Ok(())
             }
         }
@@ -437,7 +437,7 @@ impl Store {
                                 Data::update_entry(data, entries, _identifier, _member)
                             })
                         });
-                        let _ = Self::update_member_count_on_group(group_identifier);
+                        ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                         Ok(())
                     }
                 }
@@ -1389,7 +1389,6 @@ impl Store {
 
     // [fire and forget]
     // Method to update the member count on the group canister (inter-canister call)
-    #[allow(unused_must_use)]
     async fn update_member_count_on_group(group_identifier: Principal) -> () {
         // Get the member count for the group
         let group_member_count_array =
@@ -1403,7 +1402,7 @@ impl Store {
 
         let (_, group_canister, _) = Identifier::decode(&group_identifier);
         // Call the update_member_count method on the group canister and send the total amount of members of the group with it
-        call::call::<(Principal, Principal, usize), ()>(
+        let _ = call::call::<(Principal, Principal, usize), ()>(
             group_canister,
             "update_member_count",
             (group_identifier, id(), count),
