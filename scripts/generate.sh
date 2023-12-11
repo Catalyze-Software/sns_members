@@ -6,7 +6,10 @@ canisters=(
 )
 
 echo -e "${GREEN}> $ENV: Generating required files..${NC}"
-cargo test --test generate
+# cargo test --test generate
+cargo test candid -p parent
+cargo test candid -p child
+
 dfx generate --network ic
 
 for t in ${canisters[@]}; do
