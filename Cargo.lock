@@ -179,6 +179,7 @@ dependencies = [
  "ic_canister_backup",
  "ic_scalable_canister",
  "serde",
+ "serde_cbor",
  "serde_json",
  "shared",
 ]
@@ -536,9 +537,9 @@ checksum = "a54b5297861c651551676e8c43df805dad175cc33bc97dbd992edbbb85dcbcdf"
 
 [[package]]
 name = "ic_canister_backup"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e57efb70af37e2f488c4c6ea296eff63177622ddc8d51240e7dcdbc86ed32dbf"
+checksum = "56f97f287e01e75d5b0474a99219953e7a31a3c218ec54db414c4d34f4158594"
 dependencies = [
  "sha2",
 ]
