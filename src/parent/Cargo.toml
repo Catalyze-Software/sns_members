@@ -9,12 +9,12 @@ edition = "2018"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
-[[test]]
-name="generate"
-path = "src/lib.rs"
+# [[test]]
+# name="generate"
+# path = "src/lib.rs"
 
 [dependencies]
-ic-cdk = {version = "0.6.8", features = ["timers"]}
+ic-cdk = { version = "0.6.8", features = ["timers"] }
 ic-cdk-macros = "0.6.8"
 candid = "0.8.2"
 serde = "1.0"
