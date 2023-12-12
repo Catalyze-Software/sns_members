@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
-use candid::{CandidType, Deserialize, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use ic_scalable_misc::traits::stable_storage_trait::StableStorableTrait;
+use ic_stable_structures::{storable::Bound, Storable};
 use serde::Serialize;
 
 pub type GroupIdentifier = Principal;
@@ -10,6 +12,20 @@ pub struct Member {
     pub profile_identifier: Principal,
     pub joined: HashMap<GroupIdentifier, Join>,
     pub invites: HashMap<GroupIdentifier, Invite>,
+}
+
+impl StableStorableTrait for Member {}
+
+impl Storable for Member {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(Encode!(self).unwrap())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Decode!(bytes.as_ref(), Self).unwrap()
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Default for Member {
