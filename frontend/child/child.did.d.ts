@@ -10,6 +10,23 @@ export type ApiError = { 'SerializeError' : ErrorMessage } |
   { 'Unauthorized' : ErrorMessage } |
   { 'Unexpected' : ErrorMessage } |
   { 'BadRequest' : ErrorMessage };
+export interface CanisterStatusResponse {
+  'status' : CanisterStatusType,
+  'memory_size' : bigint,
+  'cycles' : bigint,
+  'settings' : DefiniteCanisterSettings,
+  'idle_cycles_burned_per_day' : bigint,
+  'module_hash' : [] | [Uint8Array | number[]],
+}
+export type CanisterStatusType = { 'stopped' : null } |
+  { 'stopping' : null } |
+  { 'running' : null };
+export interface DefiniteCanisterSettings {
+  'freezing_threshold' : bigint,
+  'controllers' : Array<Principal>,
+  'memory_allocation' : bigint,
+  'compute_allocation' : bigint,
+}
 export interface ErrorMessage {
   'tag' : string,
   'message' : string,
@@ -58,6 +75,13 @@ export interface Member {
   'joined' : Array<[Principal, Join]>,
   'profile_identifier' : Principal,
 }
+export type RejectionCode = { 'NoError' : null } |
+  { 'CanisterError' : null } |
+  { 'SysTransient' : null } |
+  { 'DestinationInvalid' : null } |
+  { 'Unknown' : null } |
+  { 'SysFatal' : null } |
+  { 'CanisterReject' : null };
 export type Result = { 'Ok' : [Principal, Member] } |
   { 'Err' : ApiError };
 export type Result_1 = { 'Ok' : null } |
@@ -66,13 +90,15 @@ export type Result_2 = { 'Ok' : Principal } |
   { 'Err' : ApiError };
 export type Result_3 = { 'Ok' : null } |
   { 'Err' : null };
-export type Result_4 = { 'Ok' : Array<InviteMemberResponse> } |
+export type Result_4 = { 'Ok' : [CanisterStatusResponse] } |
+  { 'Err' : [RejectionCode, string] };
+export type Result_5 = { 'Ok' : Array<InviteMemberResponse> } |
   { 'Err' : ApiError };
-export type Result_5 = { 'Ok' : JoinedMemberResponse } |
+export type Result_6 = { 'Ok' : JoinedMemberResponse } |
   { 'Err' : ApiError };
-export type Result_6 = { 'Ok' : Array<JoinedMemberResponse> } |
+export type Result_7 = { 'Ok' : Array<JoinedMemberResponse> } |
   { 'Err' : ApiError };
-export type Result_7 = { 'Ok' : [Principal, Array<string>] } |
+export type Result_8 = { 'Ok' : [Principal, Array<string>] } |
   { 'Err' : string };
 export interface UpdateMessage {
   'canister_principal' : Principal,
@@ -90,6 +116,7 @@ export interface _SERVICE {
   'add_entry_by_parent' : ActorMethod<[Uint8Array | number[]], Result_1>,
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
+  'canister_status' : ActorMethod<[], Result_4>,
   'clear_backup' : ActorMethod<[], undefined>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
   'download_chunk' : ActorMethod<[bigint], [bigint, Uint8Array | number[]]>,
@@ -102,13 +129,13 @@ export interface _SERVICE {
     [Principal, bigint, bigint],
     [Uint8Array | number[], [bigint, bigint]]
   >,
-  'get_group_invites' : ActorMethod<[Principal], Result_4>,
+  'get_group_invites' : ActorMethod<[Principal], Result_5>,
   'get_group_invites_count' : ActorMethod<
     [Array<Principal>],
     Array<[Principal, bigint]>
   >,
-  'get_group_member' : ActorMethod<[Principal, Principal], Result_5>,
-  'get_group_members' : ActorMethod<[Principal], Result_6>,
+  'get_group_member' : ActorMethod<[Principal, Principal], Result_6>,
+  'get_group_members' : ActorMethod<[Principal], Result_7>,
   'get_group_members_count' : ActorMethod<
     [Array<Principal>],
     Array<[Principal, bigint]>
@@ -117,7 +144,7 @@ export interface _SERVICE {
     [Array<Principal>],
     Array<[Principal, Array<Principal>]>
   >,
-  'get_member_roles' : ActorMethod<[Principal, Principal], Result_7>,
+  'get_member_roles' : ActorMethod<[Principal, Principal], Result_8>,
   'get_self' : ActorMethod<[], Result>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
