@@ -9,10 +9,6 @@ edition = "2018"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
-[[test]]
-name="generate"
-path = "src/lib.rs"
-
 [dependencies]
 ic-cdk = "0.11.0"
 candid = "0.9.8"

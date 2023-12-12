@@ -1,4 +1,2 @@
 [workspace]
-members = [
-    "src",
-]
+members = ["src/parent", "src/child", "src/shared"]
