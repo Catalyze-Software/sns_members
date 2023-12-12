@@ -51,13 +51,45 @@ export const idlFactory = ({ IDL }) => {
   const Result_1 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : ApiError });
   const Result_2 = IDL.Variant({ 'Ok' : IDL.Principal, 'Err' : ApiError });
   const Result_3 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Null });
+  const CanisterStatusType = IDL.Variant({
+    'stopped' : IDL.Null,
+    'stopping' : IDL.Null,
+    'running' : IDL.Null,
+  });
+  const DefiniteCanisterSettings = IDL.Record({
+    'freezing_threshold' : IDL.Nat,
+    'controllers' : IDL.Vec(IDL.Principal),
+    'memory_allocation' : IDL.Nat,
+    'compute_allocation' : IDL.Nat,
+  });
+  const CanisterStatusResponse = IDL.Record({
+    'status' : CanisterStatusType,
+    'memory_size' : IDL.Nat,
+    'cycles' : IDL.Nat,
+    'settings' : DefiniteCanisterSettings,
+    'idle_cycles_burned_per_day' : IDL.Nat,
+    'module_hash' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  });
+  const RejectionCode = IDL.Variant({
+    'NoError' : IDL.Null,
+    'CanisterError' : IDL.Null,
+    'SysTransient' : IDL.Null,
+    'DestinationInvalid' : IDL.Null,
+    'Unknown' : IDL.Null,
+    'SysFatal' : IDL.Null,
+    'CanisterReject' : IDL.Null,
+  });
+  const Result_4 = IDL.Variant({
+    'Ok' : IDL.Tuple(CanisterStatusResponse),
+    'Err' : IDL.Tuple(RejectionCode, IDL.Text),
+  });
   const InviteMemberResponse = IDL.Record({
     'principal' : IDL.Principal,
     'group_identifier' : IDL.Principal,
     'invite' : Invite,
     'member_identifier' : IDL.Principal,
   });
-  const Result_4 = IDL.Variant({
+  const Result_5 = IDL.Variant({
     'Ok' : IDL.Vec(InviteMemberResponse),
     'Err' : ApiError,
   });
@@ -67,15 +99,15 @@ export const idlFactory = ({ IDL }) => {
     'member_identifier' : IDL.Principal,
     'roles' : IDL.Vec(IDL.Text),
   });
-  const Result_5 = IDL.Variant({
+  const Result_6 = IDL.Variant({
     'Ok' : JoinedMemberResponse,
     'Err' : ApiError,
   });
-  const Result_6 = IDL.Variant({
+  const Result_7 = IDL.Variant({
     'Ok' : IDL.Vec(JoinedMemberResponse),
     'Err' : ApiError,
   });
-  const Result_7 = IDL.Variant({
+  const Result_8 = IDL.Variant({
     'Ok' : IDL.Tuple(IDL.Principal, IDL.Vec(IDL.Text)),
     'Err' : IDL.Text,
   });
@@ -111,6 +143,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+<<<<<<< HEAD
     'canister_backup_data' : IDL.Func([], [IDL.Text, IDL.Text], []),
     'canister_clear_backup' : IDL.Func([], [], []),
     'canister_finalize_upload' : IDL.Func(
@@ -119,6 +152,9 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'canister_restore_data' : IDL.Func([], [], []),
+=======
+    'canister_status' : IDL.Func([], [Result_4], []),
+>>>>>>> development
     'clear_backup' : IDL.Func([], [], []),
     'create_empty_member' : IDL.Func(
         [IDL.Principal, IDL.Principal],
@@ -151,7 +187,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Nat8), IDL.Tuple(IDL.Nat64, IDL.Nat64)],
         ['query'],
       ),
-    'get_group_invites' : IDL.Func([IDL.Principal], [Result_4], []),
+    'get_group_invites' : IDL.Func([IDL.Principal], [Result_5], []),
     'get_group_invites_count' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
         [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Nat64))],
@@ -159,10 +195,10 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_group_member' : IDL.Func(
         [IDL.Principal, IDL.Principal],
-        [Result_5],
+        [Result_6],
         ['query'],
       ),
-    'get_group_members' : IDL.Func([IDL.Principal], [Result_6], ['query']),
+    'get_group_members' : IDL.Func([IDL.Principal], [Result_7], ['query']),
     'get_group_members_count' : IDL.Func(
         [IDL.Vec(IDL.Principal)],
         [IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Nat64))],
@@ -175,7 +211,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_member_roles' : IDL.Func(
         [IDL.Principal, IDL.Principal],
-        [Result_7],
+        [Result_8],
         ['query'],
       ),
     'get_self' : IDL.Func([], [Result], ['query']),
