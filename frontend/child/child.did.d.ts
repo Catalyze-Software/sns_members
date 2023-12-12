@@ -116,7 +116,6 @@ export interface _SERVICE {
   'add_entry_by_parent' : ActorMethod<[Uint8Array | number[]], Result_1>,
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
-<<<<<<< HEAD
   'canister_backup_data' : ActorMethod<[], [string, string]>,
   'canister_clear_backup' : ActorMethod<[], undefined>,
   'canister_finalize_upload' : ActorMethod<
@@ -124,9 +123,7 @@ export interface _SERVICE {
     undefined
   >,
   'canister_restore_data' : ActorMethod<[], undefined>,
-=======
   'canister_status' : ActorMethod<[], Result_4>,
->>>>>>> development
   'clear_backup' : ActorMethod<[], undefined>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
   'download_chunk' : ActorMethod<[bigint], [bigint, Uint8Array | number[]]>,

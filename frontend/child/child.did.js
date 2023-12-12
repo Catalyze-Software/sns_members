@@ -143,7 +143,6 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
-<<<<<<< HEAD
     'canister_backup_data' : IDL.Func([], [IDL.Text, IDL.Text], []),
     'canister_clear_backup' : IDL.Func([], [], []),
     'canister_finalize_upload' : IDL.Func(
@@ -152,9 +151,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'canister_restore_data' : IDL.Func([], [], []),
-=======
     'canister_status' : IDL.Func([], [Result_4], []),
->>>>>>> development
     'clear_backup' : IDL.Func([], [], []),
     'create_empty_member' : IDL.Func(
         [IDL.Principal, IDL.Principal],
