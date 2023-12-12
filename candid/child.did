@@ -98,10 +98,6 @@ service : (principal, text, nat64) -> {
   add_entry_by_parent : (vec nat8) -> (Result_1);
   add_owner : (principal, principal) -> (Result_2);
   assign_role : (text, principal, principal) -> (Result_3);
-  canister_backup_data : () -> (text, text);
-  canister_clear_backup : () -> ();
-  canister_finalize_upload : (vec nat8, vec nat8) -> ();
-  canister_restore_data : () -> ();
   canister_status : () -> (Result_4);
   clear_backup : () -> ();
   create_empty_member : (principal, principal) -> (Result_2);
@@ -110,25 +106,25 @@ service : (principal, text, nat64) -> {
   download_stable_data_chunk : (nat64) -> (record { nat64; vec nat8 }) query;
   finalize_upload : () -> (text);
   get_chunked_invite_data : (principal, nat64, nat64) -> (
-      vec nat8,
-      record { nat64; nat64 },
-    ) query;
+    vec nat8,
+    record { nat64; nat64 },
+  ) query;
   get_chunked_join_data : (principal, nat64, nat64) -> (
-      vec nat8,
-      record { nat64; nat64 },
-    ) query;
+    vec nat8,
+    record { nat64; nat64 },
+  ) query;
   get_group_invites : (principal) -> (Result_5);
   get_group_invites_count : (vec principal) -> (
-      vec record { principal; nat64 },
-    ) query;
+    vec record { principal; nat64 }
+  ) query;
   get_group_member : (principal, principal) -> (Result_6) query;
   get_group_members : (principal) -> (Result_7) query;
   get_group_members_count : (vec principal) -> (
-      vec record { principal; nat64 },
-    ) query;
+    vec record { principal; nat64 }
+  ) query;
   get_groups_for_members : (vec principal) -> (
-      vec record { principal; vec principal },
-    ) query;
+    vec record { principal; vec principal }
+  ) query;
   get_member_roles : (principal, principal) -> (Result_8) query;
   get_self : () -> (Result) query;
   http_request : (HttpRequest) -> (HttpResponse) query;
@@ -147,4 +143,4 @@ service : (principal, text, nat64) -> {
   upload_chunk : (record { nat64; vec nat8 }) -> ();
   upload_entries_chunk : (record { nat64; vec nat8 }) -> ();
   upload_stable_data_chunk : (record { nat64; vec nat8 }) -> ();
-}
+};
