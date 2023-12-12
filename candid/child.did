@@ -98,10 +98,16 @@ service : (principal, text, nat64) -> {
   add_entry_by_parent : (vec nat8) -> (Result_1);
   add_owner : (principal, principal) -> (Result_2);
   assign_role : (text, principal, principal) -> (Result_3);
+  canister_backup_data : () -> (text, text);
+  canister_clear_backup : () -> ();
+  canister_finalize_upload : (vec nat8, vec nat8) -> ();
+  canister_restore_data : () -> ();
   canister_status : () -> (Result_4);
   clear_backup : () -> ();
   create_empty_member : (principal, principal) -> (Result_2);
   download_chunk : (nat64) -> (record { nat64; vec nat8 }) query;
+  download_entries_chunk : (nat64) -> (record { nat64; vec nat8 }) query;
+  download_stable_data_chunk : (nat64) -> (record { nat64; vec nat8 }) query;
   finalize_upload : () -> (text);
   get_chunked_invite_data : (principal, nat64, nat64) -> (
       vec nat8,
@@ -136,5 +142,9 @@ service : (principal, text, nat64) -> {
   restore_data : () -> ();
   set_roles : (vec text, principal, principal) -> (Result_3);
   total_chunks : () -> (nat64) query;
+  total_entries_chunks : () -> (nat64) query;
+  total_stable_data_chunks : () -> (nat64) query;
   upload_chunk : (record { nat64; vec nat8 }) -> ();
+  upload_entries_chunk : (record { nat64; vec nat8 }) -> ();
+  upload_stable_data_chunk : (record { nat64; vec nat8 }) -> ();
 }
