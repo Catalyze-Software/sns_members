@@ -69,7 +69,7 @@ fn download_entries_chunk(n: u64) -> Chunk {
 * RESTORE METHODS
 */
 #[update(guard = "is_owner")]
-fn clear_backup() {
+fn canister_clear_backup() {
     STABLE_DATA_BACKUP.with(|b| b.borrow_mut().clear_backup());
     ENTRIES_BACKUP.with(|b| b.borrow_mut().clear_backup());
 }
@@ -85,7 +85,7 @@ fn upload_entries_chunk(chunk: Chunk) {
 }
 
 #[update(guard = "is_owner")]
-fn finalize_upload(stable_data_hash: Vec<u8>, entries_hash: Vec<u8>) {
+fn canister_finalize_upload(stable_data_hash: Vec<u8>, entries_hash: Vec<u8>) {
     let computed_stable_data_hash = STABLE_DATA_BACKUP.with(|b| b.borrow_mut().finalize_upload());
     let computed_entries_hash = ENTRIES_BACKUP.with(|b| b.borrow_mut().finalize_upload());
 
