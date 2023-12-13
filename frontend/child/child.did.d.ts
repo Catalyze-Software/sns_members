@@ -161,7 +161,6 @@ export interface _SERVICE {
   >,
   'get_member_roles' : ActorMethod<[Principal, Principal], Result_8>,
   'get_self' : ActorMethod<[], Result>,
-  'hashes' : ActorMethod<[], [string, string]>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'invite_to_group' : ActorMethod<[Principal, Principal], Result>,
   'join_group' : ActorMethod<[Principal, [] | [string]], Result>,

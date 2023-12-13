@@ -212,7 +212,6 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_self' : IDL.Func([], [Result], ['query']),
-    'hashes' : IDL.Func([], [IDL.Text, IDL.Text], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'invite_to_group' : IDL.Func([IDL.Principal, IDL.Principal], [Result], []),
     'join_group' : IDL.Func([IDL.Principal, IDL.Opt(IDL.Text)], [Result], []),
