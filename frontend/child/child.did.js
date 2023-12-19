@@ -144,13 +144,6 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'canister_backup_data' : IDL.Func([], [IDL.Text, IDL.Text], []),
-    'canister_clear_backup' : IDL.Func([], [], []),
-    'canister_finalize_upload' : IDL.Func(
-        [IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
-        [],
-        [],
-      ),
-    'canister_restore_data' : IDL.Func([], [], []),
     'canister_status' : IDL.Func([], [Result_4], []),
     'clear_backup' : IDL.Func([], [], []),
     'create_empty_member' : IDL.Func(
@@ -242,16 +235,6 @@ export const idlFactory = ({ IDL }) => {
     'total_entries_chunks' : IDL.Func([], [IDL.Nat64], ['query']),
     'total_stable_data_chunks' : IDL.Func([], [IDL.Nat64], ['query']),
     'upload_chunk' : IDL.Func(
-        [IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Nat8))],
-        [],
-        [],
-      ),
-    'upload_entries_chunk' : IDL.Func(
-        [IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Nat8))],
-        [],
-        [],
-      ),
-    'upload_stable_data_chunk' : IDL.Func(
         [IDL.Tuple(IDL.Nat64, IDL.Vec(IDL.Nat8))],
         [],
         [],

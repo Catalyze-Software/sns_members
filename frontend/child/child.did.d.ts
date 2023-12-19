@@ -117,12 +117,6 @@ export interface _SERVICE {
   'add_owner' : ActorMethod<[Principal, Principal], Result_2>,
   'assign_role' : ActorMethod<[string, Principal, Principal], Result_3>,
   'canister_backup_data' : ActorMethod<[], [string, string]>,
-  'canister_clear_backup' : ActorMethod<[], undefined>,
-  'canister_finalize_upload' : ActorMethod<
-    [Uint8Array | number[], Uint8Array | number[]],
-    undefined
-  >,
-  'canister_restore_data' : ActorMethod<[], undefined>,
   'canister_status' : ActorMethod<[], Result_4>,
   'clear_backup' : ActorMethod<[], undefined>,
   'create_empty_member' : ActorMethod<[Principal, Principal], Result_2>,
@@ -178,12 +172,4 @@ export interface _SERVICE {
   'total_entries_chunks' : ActorMethod<[], bigint>,
   'total_stable_data_chunks' : ActorMethod<[], bigint>,
   'upload_chunk' : ActorMethod<[[bigint, Uint8Array | number[]]], undefined>,
-  'upload_entries_chunk' : ActorMethod<
-    [[bigint, Uint8Array | number[]]],
-    undefined
-  >,
-  'upload_stable_data_chunk' : ActorMethod<
-    [[bigint, Uint8Array | number[]]],
-    undefined
-  >,
 }
