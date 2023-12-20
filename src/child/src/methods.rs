@@ -10,7 +10,7 @@ use super::store::Store;
 
 // This method is used to join an existing group
 // The method is async because checks if the group exists and optionally creates a new canister
-#[update]
+#[update(guard = "auth")]
 async fn join_group(
     group_identifier: Principal,
     account_identifier: Option<String>,
@@ -19,7 +19,7 @@ async fn join_group(
 }
 
 // This method is used to create an empty member when a profile is created (inter-canister call)
-#[update]
+#[update(guard = "auth")]
 async fn create_empty_member(
     caller: Principal,
     profile_identifier: Principal,
@@ -28,7 +28,7 @@ async fn create_empty_member(
 }
 
 // This method is used to invite a user to a group
-#[update]
+#[update(guard = "auth")]
 async fn invite_to_group(
     member_principal: Principal,
     group_identifier: Principal,
@@ -40,7 +40,7 @@ async fn invite_to_group(
 }
 
 // This method is used to accept an invite to a group as a admin
-#[update]
+#[update(guard = "auth")]
 async fn accept_user_request_group_invite(
     member_principal: Principal,
     group_identifier: Principal,
@@ -52,7 +52,7 @@ async fn accept_user_request_group_invite(
 }
 
 // This method is used to accept an invite to a group as a user
-#[update]
+#[update(guard = "auth")]
 async fn accept_owner_request_group_invite(
     group_identifier: Principal,
 ) -> Result<(Principal, Member), ApiError> {
@@ -60,7 +60,7 @@ async fn accept_owner_request_group_invite(
 }
 
 // This method is used a to add an owner to the member entry when a group is created (inter-canister call)
-#[update]
+#[update(guard = "auth")]
 async fn add_owner(
     owner_principal: Principal,
     group_identifier: Principal,
@@ -69,7 +69,7 @@ async fn add_owner(
 }
 
 // Method to assign a role to a specific group member
-#[update]
+#[update(guard = "auth")]
 async fn assign_role(
     role: String,
     member_identifier: Principal,
@@ -82,7 +82,7 @@ async fn assign_role(
 }
 
 // Method to remove a role from a specific group member
-#[update]
+#[update(guard = "auth")]
 async fn remove_role(
     role: String,
     member_identifier: Principal,
@@ -95,7 +95,7 @@ async fn remove_role(
 }
 
 // Method to assign a role to a specific group member
-#[update]
+#[update(guard = "auth")]
 async fn set_roles(
     roles: Vec<String>,
     member_identifier: Principal,
@@ -156,19 +156,19 @@ fn get_member_roles(
 }
 
 // Method to let the caller leave a group
-#[update]
+#[update(guard = "auth")]
 fn leave_group(group_identifier: Principal) -> Result<(), ApiError> {
     Store::leave_group(caller(), group_identifier)
 }
 
 // Method to remove an outstanding invite for a group as a user
-#[update]
+#[update(guard = "auth")]
 fn remove_invite(group_identifier: Principal) -> Result<(), ApiError> {
     Store::remove_invite(caller(), group_identifier)
 }
 
 // Method to remove a member from a group
-#[update]
+#[update(guard = "auth")]
 async fn remove_member_from_group(
     principal: Principal,
     group_identifier: Principal,
@@ -180,7 +180,7 @@ async fn remove_member_from_group(
 }
 
 // Method to remove an outstanding invite for a group as a admin
-#[update]
+#[update(guard = "auth")]
 async fn remove_member_invite_from_group(
     principal: Principal,
     group_identifier: Principal,
@@ -234,4 +234,11 @@ fn get_chunked_invite_data(
     }
 
     Store::get_chunked_invite_data(&group_identifier, chunk, max_bytes_per_chunk)
+}
+
+pub fn auth() -> Result<(), String> {
+    match caller() == Principal::anonymous() {
+        true => Err("Unauthorized".to_string()),
+        false => Ok(()),
+    }
 }
