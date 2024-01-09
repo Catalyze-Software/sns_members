@@ -679,18 +679,18 @@ impl Store {
             }
             "ICRC" => {
                 let response = Self::icrc_balance_of(nft_canister.principal, principal).await;
-                response >= nft_canister.amount
+                response >= nft_canister.amount as u128
             }
             _ => false,
         }
     }
 
     // temporary put this here, should be in `ic_scalable_misc::helpers::token_canister_helper`
-    pub async fn icrc_balance_of(canister: Principal, principal: Principal) -> u64 {
+    pub async fn icrc_balance_of(canister: Principal, principal: Principal) -> u128 {
         let call: Result<(u128,), _> =
             api::call::call(canister, "icrc1_balance_of", (principal,)).await;
         match call {
-            Ok(response) => response.0 as u64,
+            Ok(response) => response.0,
             Err(_) => 0,
         }
     }
