@@ -1121,7 +1121,7 @@ impl Store {
                 None => {
                     // If there is no existing member, create a new member
                     let member = Member {
-                        principal: member_principal.clone(),
+                        principal: member_principal,
                         profile_identifier: Principal::anonymous(),
                         joined: HashMap::new(),
                         invites: HashMap::from_iter(vec![(group_identifier, invite)]),
