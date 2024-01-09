@@ -1,16 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, iter::FromIterator, vec};
 
-use candid::{Nat, Principal};
-use ic_catalyze_notifications::{
-    models::{
-        Environment, InviteNotificationData, InviteType as NotificationInviteType,
-        InviteTypeRequest,
-    },
-    store::Notification,
-};
+use candid::Principal;
 use ic_cdk::{
     api::{self, call, time},
-    caller, id,
+    id,
 };
 use ic_scalable_canister::ic_scalable_misc::{
     enums::{
@@ -33,7 +26,6 @@ use ic_scalable_canister::ic_scalable_misc::{
 };
 use ic_scalable_canister::store::Data;
 
-use serde_json::json;
 use shared::member_model::{
     Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member,
 };
