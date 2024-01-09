@@ -677,6 +677,7 @@ impl Store {
                 let response = legacy_dip721_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
             }
+            // If the canister is a ICRC canister, check if the caller owns the amount of tokens
             "ICRC" => {
                 let response = Self::icrc_balance_of(nft_canister.principal, principal).await;
                 response >= nft_canister.amount as u128
