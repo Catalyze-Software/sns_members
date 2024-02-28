@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, iter::FromIterator, vec};
 
 use candid::Principal;
 use ic_cdk::{
-    api::{call, time},
+    api::{self, call, time},
     id,
 };
 use ic_scalable_canister::ic_scalable_misc::{
@@ -677,7 +677,22 @@ impl Store {
                 let response = legacy_dip721_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
             }
+            // If the canister is a ICRC canister, check if the caller owns the amount of tokens
+            "ICRC" => {
+                let response = Self::icrc_balance_of(nft_canister.principal, principal).await;
+                response >= nft_canister.amount as u128
+            }
             _ => false,
+        }
+    }
+
+    // temporary put this here, should be in `ic_scalable_misc::helpers::token_canister_helper`
+    pub async fn icrc_balance_of(canister: Principal, principal: Principal) -> u128 {
+        let call: Result<(u128,), _> =
+            api::call::call(canister, "icrc1_balance_of", (principal,)).await;
+        match call {
+            Ok(response) => response.0,
+            Err(_) => 0,
         }
     }
 
@@ -1112,6 +1127,7 @@ impl Store {
                         joined: HashMap::new(),
                         invites: HashMap::from_iter(vec![(group_identifier, invite)]),
                     };
+
                     // Add the member to the members array
                     ENTRIES.with(|entries| {
                         Data::add_entry(data, entries, member, Some(IDENTIFIER_KIND.to_string()))
@@ -1130,6 +1146,7 @@ impl Store {
                     }
                     // If there is an existing member, add the invite to the invites array
                     _member.invites.insert(group_identifier, invite);
+
                     // Update the member
                     ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
                 }

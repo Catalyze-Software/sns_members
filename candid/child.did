@@ -99,9 +99,6 @@ service : (principal, text, nat64) -> {
   add_owner : (principal, principal) -> (Result_2);
   assign_role : (text, principal, principal) -> (Result_3);
   canister_backup_data : () -> (text, text);
-  canister_clear_backup : () -> ();
-  canister_finalize_upload : (vec nat8, vec nat8) -> ();
-  canister_restore_data : () -> ();
   canister_status : () -> (Result_4);
   clear_backup : () -> ();
   create_empty_member : (principal, principal) -> (Result_2);
@@ -145,6 +142,4 @@ service : (principal, text, nat64) -> {
   total_entries_chunks : () -> (nat64) query;
   total_stable_data_chunks : () -> (nat64) query;
   upload_chunk : (record { nat64; vec nat8 }) -> ();
-  upload_entries_chunk : (record { nat64; vec nat8 }) -> ();
-  upload_stable_data_chunk : (record { nat64; vec nat8 }) -> ();
 }
