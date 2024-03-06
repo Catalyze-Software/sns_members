@@ -132,6 +132,7 @@ service : (principal, text, nat64) -> {
   invite_to_group : (principal, principal) -> (Result);
   join_group : (principal, opt text) -> (Result);
   leave_group : (principal) -> (Result_1);
+  read_members_entries : () -> (vec record { text; Member }) query;
   remove_invite : (principal) -> (Result_1);
   remove_member_from_group : (principal, principal) -> (Result_1);
   remove_member_invite_from_group : (principal, principal) -> (Result_1);
