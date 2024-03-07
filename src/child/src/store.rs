@@ -2,11 +2,10 @@ use std::{cell::RefCell, collections::HashMap, iter::FromIterator, vec};
 
 use candid::Principal;
 use ic_cdk::{
-    api::{call, time},
+    api::{self, call, time},
     id,
 };
-use ic_scalable_canister::store::Data;
-use ic_scalable_misc::{
+use ic_scalable_canister::ic_scalable_misc::{
     enums::{
         api_error_type::{ApiError, ApiErrorType},
         privacy_type::{GatedType, NeuronGatedRules, Privacy, TokenGated},
@@ -25,15 +24,41 @@ use ic_scalable_misc::{
         permissions_models::{PermissionActionType, PermissionType},
     },
 };
+use ic_scalable_canister::store::Data;
 
 use shared::member_model::{
     Invite, InviteMemberResponse, InviteType, Join, JoinedMemberResponse, Member,
 };
 
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    {DefaultMemoryImpl, StableBTreeMap, StableCell},
+};
+
 use crate::IDENTIFIER_KIND;
 
+type Memory = VirtualMemory<DefaultMemoryImpl>;
+
+pub static DATA_MEMORY_ID: MemoryId = MemoryId::new(0);
+pub static ENTRIES_MEMORY_ID: MemoryId = MemoryId::new(1);
 thread_local! {
-    pub static DATA: RefCell<Data<Member>>  = RefCell::new(Data::default());
+    pub static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+
+
+        // NEW STABLE
+        pub static STABLE_DATA: RefCell<StableCell<Data, Memory>> = RefCell::new(
+            StableCell::init(
+                MEMORY_MANAGER.with(|m| m.borrow().get(DATA_MEMORY_ID)),
+                Data::default(),
+            ).expect("failed")
+        );
+
+        pub static ENTRIES: RefCell<StableBTreeMap<String, Member, Memory>> = RefCell::new(
+            StableBTreeMap::init(
+                MEMORY_MANAGER.with(|m| m.borrow().get(ENTRIES_MEMORY_ID)),
+            )
+        );
 }
 
 pub struct Store;
@@ -64,7 +89,9 @@ impl Store {
                                 ApiErrorType::BadRequest,
                                 "UNAUTHORIZED",
                                 "You are not authorized to perform this action",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "join_group",
                                 None,
                             ));
@@ -79,7 +106,9 @@ impl Store {
                                 ApiErrorType::BadRequest,
                                 "ALREADY_JOINED",
                                 "You are already part of this group",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "join_group",
                                 None,
                             ));
@@ -94,7 +123,9 @@ impl Store {
                                 ApiErrorType::BadRequest,
                                 "PENDING_INVITE",
                                 "There is already a pending invite for this group",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "join_group",
                                 None,
                             ));
@@ -120,22 +151,25 @@ impl Store {
                     Ok(_updated_member) => match existing_member {
                         None => {
                             // if there is no existing member, add a new one
-                            let result = DATA.with(|data| {
-                                Data::add_entry(
-                                    data,
-                                    _updated_member.clone(),
-                                    Some(IDENTIFIER_KIND.to_string()),
-                                )
+                            let result = STABLE_DATA.with(|data| {
+                                ENTRIES.with(|entries| {
+                                    Data::add_entry(
+                                        data,
+                                        entries,
+                                        _updated_member.clone(),
+                                        Some(IDENTIFIER_KIND.to_string()),
+                                    )
+                                })
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             match result {
                                 // The group was not added to the data store because the canister is at capacity
                                 Err(err) => match err {
                                     ApiError::CanisterAtCapacity(message) => {
-                                        let _data = DATA.with(|v| v.borrow().clone());
+                                        let _data = STABLE_DATA.with(|v| v.borrow().get().clone());
                                         // Spawn a sibling canister and pass the group data to it
-                                        match Data::spawn_sibling(_data, _updated_member).await {
+                                        match Data::spawn_sibling(&_data, _updated_member).await {
                                             Ok(_) => Err(ApiError::CanisterAtCapacity(message)),
                                             Err(err) => Err(err),
                                         }
@@ -148,11 +182,13 @@ impl Store {
                         // if there is an existing member, update the existing one
                         Some((_identifier, _)) => {
                             // update the member
-                            let result = DATA.with(|data| {
-                                Data::update_entry(data, _identifier, _updated_member)
+                            let result = STABLE_DATA.with(|data| {
+                                ENTRIES.with(|entries| {
+                                    Data::update_entry(data, entries, _identifier, _updated_member)
+                                })
                             });
                             // fire and forget inter canister call to update the group member count on the group canister
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             result
                         }
                     },
@@ -175,7 +211,9 @@ impl Store {
                 ApiErrorType::NotFound,
                 "INVALID TYPE",
                 format!("'{}' is not supported", kind).as_str(),
-                DATA.with(|data| Data::get_name(data)).as_str(),
+                STABLE_DATA
+                    .with(|data| Data::get_name(data.borrow().get()))
+                    .as_str(),
                 "create_empty_member",
                 None,
             ));
@@ -191,8 +229,15 @@ impl Store {
                         invites: HashMap::new(),
                     };
                     // Add the new member
-                    let result = DATA.with(|data| {
-                        Data::add_entry(data, empty_member, Some(IDENTIFIER_KIND.to_string()))
+                    let result = STABLE_DATA.with(|data| {
+                        ENTRIES.with(|entries| {
+                            Data::add_entry(
+                                data,
+                                entries,
+                                empty_member,
+                                Some(IDENTIFIER_KIND.to_string()),
+                            )
+                        })
                     });
                     match result {
                         Ok((_identfier, _)) => Ok(_identfier),
@@ -204,7 +249,9 @@ impl Store {
                     ApiErrorType::BadRequest,
                     "ALREADY_MEMBER",
                     "You already have an entry",
-                    DATA.with(|data| Data::get_name(data)).as_str(),
+                    STABLE_DATA
+                        .with(|data| Data::get_name(data.borrow().get()))
+                        .as_str(),
                     "create_empty_member",
                     None,
                 )),
@@ -224,8 +271,11 @@ impl Store {
             // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
                 _member.joined.remove(&group_identifier);
-                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
-                Ok(Self::update_member_count_on_group(&group_identifier))
+                let _ = STABLE_DATA.with(|data| {
+                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
+                });
+                ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
+                Ok(())
             }
         }
     }
@@ -240,7 +290,9 @@ impl Store {
             // If there is an existing member, continue
             Some((_identifier, mut _member)) => {
                 _member.invites.remove(&group_identifier);
-                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+                let _ = STABLE_DATA.with(|data| {
+                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
+                });
                 Ok(())
             }
         }
@@ -253,7 +305,8 @@ impl Store {
         group_identifier: Principal,
     ) -> Result<(), ()> {
         // Get the existing member
-        let member = DATA.with(|data| Data::get_entry(data, member_identifier));
+        let member = STABLE_DATA
+            .with(|data| ENTRIES.with(|entries| Data::get_entry(data, entries, member_identifier)));
 
         if let Ok((_identifier, mut _member)) = member {
             // Get the existing roles for the group
@@ -277,11 +330,49 @@ impl Store {
                         _member.joined.insert(group_identifier, join);
                     }
                 }
-                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+                let _ = STABLE_DATA.with(|data| {
+                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
+                });
             }
             Ok(())
         } else {
             Err(())
+        }
+    }
+
+    // Method to assign a group role to a member
+    pub fn set_roles(
+        roles: Vec<String>,
+        member_identifier: Principal,
+        group_identifier: Principal,
+    ) -> Result<(), ()> {
+        match ENTRIES.with(|entries| entries.borrow().get(&member_identifier.to_string())) {
+            Some(mut _member) => {
+                // Get the existing roles for the group
+                if let Some(_joined) = _member.joined.get(&group_identifier) {
+                    match _member.joined.get_mut(&group_identifier) {
+                        Some(_join) => {
+                            _join.roles = roles;
+                            _join.updated_at = time();
+                        }
+                        None => {
+                            let join = Join {
+                                roles,
+                                updated_at: time(),
+                                created_at: time(),
+                            };
+                            _member.joined.insert(group_identifier, join);
+                        }
+                    }
+                    let _ = STABLE_DATA.with(|data| {
+                        ENTRIES.with(|entries| {
+                            Data::update_entry(data, entries, member_identifier, _member)
+                        })
+                    });
+                }
+                Ok(())
+            }
+            None => Err(()),
         }
     }
 
@@ -292,7 +383,8 @@ impl Store {
         group_identifier: Principal,
     ) -> Result<(), ()> {
         // Get the existing member
-        let member = DATA.with(|data| Data::get_entry(data, member_identifier));
+        let member = STABLE_DATA
+            .with(|data| ENTRIES.with(|entries| Data::get_entry(data, entries, member_identifier)));
         if let Ok((_identifier, mut _member)) = member {
             let joined = _member.joined.get_mut(&group_identifier);
 
@@ -311,7 +403,9 @@ impl Store {
                 }
             }
 
-            let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+            let _ = STABLE_DATA.with(|data| {
+                ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
+            });
             Ok(())
         } else {
             Err(())
@@ -338,8 +432,13 @@ impl Store {
                     )),
                     Some((_identifier, mut _member)) => {
                         _member.joined.remove(&group_identifier);
-                        let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
-                        Ok(Self::update_member_count_on_group(&group_identifier))
+                        let _ = STABLE_DATA.with(|data| {
+                            ENTRIES.with(|entries| {
+                                Data::update_entry(data, entries, _identifier, _member)
+                            })
+                        });
+                        ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
+                        Ok(())
                     }
                 }
                 // If the member is not an owner, throw an error
@@ -348,7 +447,9 @@ impl Store {
                     ApiErrorType::BadRequest,
                     "UNAUTHORIZED",
                     "You are not authorized to perform this action",
-                    DATA.with(|data| Data::get_name(data)).as_str(),
+                    STABLE_DATA
+                        .with(|data| Data::get_name(data.borrow().get()))
+                        .as_str(),
                     "join_group",
                     None,
                 ));
@@ -377,7 +478,9 @@ impl Store {
             // If the member exists, remove the invite
             Some((_identifier, mut _member)) => {
                 _member.invites.remove(&group_identifier);
-                let _ = DATA.with(|data| Data::update_entry(data, _identifier, _member));
+                let _ = STABLE_DATA.with(|data| {
+                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
+                });
                 Ok(())
             }
         }
@@ -444,7 +547,9 @@ impl Store {
                     ApiErrorType::BadRequest,
                     "UNSUPPORTED",
                     "This type of invite isnt supported through this call",
-                    DATA.with(|data| Data::get_name(data)).as_str(),
+                    STABLE_DATA
+                        .with(|data| Data::get_name(data.borrow().get()))
+                        .as_str(),
                     "add_invite_or_join_group_to_member",
                     None,
                 ))
@@ -486,7 +591,9 @@ impl Store {
                                 ApiErrorType::Unauthorized,
                                 "NOT_OWNING_NEURON",
                                 "You are not owning this neuron required to join this group",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "add_invite_or_join_group_to_member",
                                 None,
                             ));
@@ -524,7 +631,9 @@ impl Store {
                                 ApiErrorType::Unauthorized,
                                 "NOT_OWNING_NFT",
                                 "You are not owning NFT / token required to join this group",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "add_invite_or_join_group_to_member",
                                 None,
                             ));
@@ -568,7 +677,22 @@ impl Store {
                 let response = legacy_dip721_balance_of(nft_canister.principal, principal).await;
                 response as u64 >= nft_canister.amount
             }
+            // If the canister is a ICRC canister, check if the caller owns the amount of tokens
+            "ICRC" => {
+                let response = Self::icrc_balance_of(nft_canister.principal, principal).await;
+                response >= nft_canister.amount as u128
+            }
             _ => false,
+        }
+    }
+
+    // temporary put this here, should be in `ic_scalable_misc::helpers::token_canister_helper`
+    pub async fn icrc_balance_of(canister: Principal, principal: Principal) -> u128 {
+        let call: Result<(u128,), _> =
+            api::call::call(canister, "icrc1_balance_of", (principal,)).await;
+        match call {
+            Ok(response) => response.0,
+            Err(_) => 0,
         }
     }
 
@@ -685,7 +809,8 @@ impl Store {
         group_identifier: Principal,
     ) -> Result<(Principal, Vec<String>), String> {
         // Get the member entry from the member identifier
-        let member = DATA.with(|data| Data::get_entry(data, member_identifier));
+        let member = STABLE_DATA
+            .with(|data| ENTRIES.with(|entries| Data::get_entry(data, entries, member_identifier)));
 
         match member {
             // If the member exists, return the roles
@@ -729,7 +854,7 @@ impl Store {
         caller: Principal,
         group_identifier: Principal,
     ) -> Result<JoinedMemberResponse, ApiError> {
-        DATA.with(|data| {
+        STABLE_DATA.with(|data| {
             // Get the member entry from the caller principal
             let member = Store::_get_member_from_caller(caller);
             match member {
@@ -748,7 +873,7 @@ impl Store {
                             ApiErrorType::NotFound,
                             "NOT_JOINED",
                             "You have no roles within this group",
-                            Data::get_name(data).as_str(),
+                            Data::get_name(data.borrow().get()).as_str(),
                             "get_group_member_by_user_principal",
                             None,
                         )),
@@ -768,15 +893,15 @@ impl Store {
     // Method to get the members of the group
     pub fn get_group_members(group_identifier: Principal) -> Vec<JoinedMemberResponse> {
         // Get all members
-        DATA.with(|data| {
-            let members = Data::get_entries(data);
+        ENTRIES.with(|entries| {
+            let members = Data::get_entries(entries);
             // Filter the members that are in the group
             members
                 .iter()
-                .filter(|(_, _member)| _member.joined.get(&group_identifier).is_some())
+                .filter(|(_, _member)| _member.joined.contains_key(&group_identifier))
                 .map(|(_identifier, _member)| {
                     Self::map_member_to_joined_member_response(
-                        _identifier,
+                        &Principal::from_text(_identifier).unwrap_or(Principal::anonymous()),
                         _member,
                         group_identifier.clone(),
                     )
@@ -790,9 +915,9 @@ impl Store {
         // Initialize the members count array
         let mut members_counts: Vec<(Principal, usize)> = vec![];
 
-        DATA.with(|data| {
+        ENTRIES.with(|entries| {
             // Get all members
-            let members = Data::get_entries(data);
+            let members = Data::get_entries(entries);
 
             // For each group, count the members that are in the group
             for group_identifier in group_identifiers {
@@ -820,7 +945,9 @@ impl Store {
             // Initialize an empty groups array
             let mut groups: Vec<Principal> = vec![];
             // Get the member entry
-            let member = DATA.with(|data| Data::get_entry(data, _member_identifier));
+            let member = STABLE_DATA.with(|data| {
+                ENTRIES.with(|entries| Data::get_entry(data, entries, _member_identifier))
+            });
 
             // If the member exists, get the groups that the member is in
             if let Ok((_, _member)) = member {
@@ -841,9 +968,9 @@ impl Store {
         // Initialize the invite count array
         let mut members_counts: Vec<(Principal, usize)> = vec![];
 
-        DATA.with(|data| {
+        ENTRIES.with(|entries| {
             // Get all members
-            let members = Data::get_entries(data);
+            let members = Data::get_entries(entries);
 
             // For each group, count the invites that are in the group
             for group_identifier in group_identifiers {
@@ -861,9 +988,9 @@ impl Store {
 
     // Method to get the invites of the group
     pub fn get_group_invites(group_identifier: Principal) -> Vec<InviteMemberResponse> {
-        DATA.with(|data| {
+        ENTRIES.with(|entries| {
             // Get all members
-            let members = Data::get_entries(data);
+            let members = Data::get_entries(entries);
 
             // Filter the members invites that are in the group
             members
@@ -871,7 +998,7 @@ impl Store {
                 .filter(|(_, _member)| _member.invites.get(&group_identifier).is_some())
                 .map(|(_identifier, _member)| {
                     Self::map_member_to_invite_member_response(
-                        _identifier,
+                        &Principal::from_text(_identifier).unwrap_or(Principal::anonymous()),
                         _member,
                         group_identifier.clone(),
                     )
@@ -889,7 +1016,7 @@ impl Store {
         let group_owner_and_privacy =
             Self::get_group_owner_and_privacy(group_identifier.clone()).await;
 
-        DATA.with(|data| {
+        STABLE_DATA.with(|data| {
             match group_owner_and_privacy {
                 // if the call fails return an error
                 Err(err) => Err(err),
@@ -900,7 +1027,7 @@ impl Store {
                             ApiErrorType::BadRequest,
                             "CANT_SET_OWNER",
                             "You are not the owner of this group",
-                            Data::get_name(data).as_str(),
+                            Data::get_name(data.borrow().get()).as_str(),
                             "add_owner",
                             None,
                         ));
@@ -925,11 +1052,14 @@ impl Store {
                                 invites: HashMap::new(),
                             };
 
-                            let response = Data::add_entry(
-                                data,
-                                new_member,
-                                Some(IDENTIFIER_KIND.to_string()),
-                            );
+                            let response = ENTRIES.with(|entries| {
+                                Data::add_entry(
+                                    data,
+                                    entries,
+                                    new_member,
+                                    Some(IDENTIFIER_KIND.to_string()),
+                                )
+                            });
                             match response {
                                 Err(err) => Err(err),
                                 Ok((_identifier, _member)) => Ok(_identifier),
@@ -942,7 +1072,7 @@ impl Store {
                                     ApiErrorType::BadRequest,
                                     "ALREADY_JOINED",
                                     "You are already part of this group",
-                                    Data::get_name(data).as_str(),
+                                    Data::get_name(data.borrow().get()).as_str(),
                                     "add_owner",
                                     None,
                                 ));
@@ -958,7 +1088,9 @@ impl Store {
                                 },
                             );
 
-                            let response = Data::update_entry(data, _identifier, _member);
+                            let response = ENTRIES.with(|entries| {
+                                Data::update_entry(data, entries, _identifier, _member)
+                            });
                             match response {
                                 Err(err) => Err(err),
                                 Ok((_identifier, _member)) => Ok(_identifier),
@@ -975,7 +1107,7 @@ impl Store {
         group_identifier: Principal,
         member_principal: Principal,
     ) -> Result<(Principal, Member), ApiError> {
-        DATA.with(|data| {
+        STABLE_DATA.with(|data| {
             // Get the existing member
             let existing_member = Self::_get_member_from_caller(member_principal);
 
@@ -995,8 +1127,11 @@ impl Store {
                         joined: HashMap::new(),
                         invites: HashMap::from_iter(vec![(group_identifier, invite)]),
                     };
+
                     // Add the member to the members array
-                    Data::add_entry(data, member, Some(IDENTIFIER_KIND.to_string()))
+                    ENTRIES.with(|entries| {
+                        Data::add_entry(data, entries, member, Some(IDENTIFIER_KIND.to_string()))
+                    })
                 }
                 Some((_identifier, mut _member)) => {
                     if _member.joined.get(&group_identifier).is_some() {
@@ -1004,15 +1139,16 @@ impl Store {
                             ApiErrorType::BadRequest,
                             "ALREADY_JOINED",
                             "You are already part of this group",
-                            Data::get_name(data).as_str(),
+                            Data::get_name(data.borrow().get()).as_str(),
                             "invite_to_group",
                             None,
                         ));
                     }
                     // If there is an existing member, add the invite to the invites array
                     _member.invites.insert(group_identifier, invite);
+
                     // Update the member
-                    Data::update_entry(data, _identifier, _member)
+                    ENTRIES.with(|entries| Data::update_entry(data, entries, _identifier, _member))
                 }
             }
         })
@@ -1044,7 +1180,9 @@ impl Store {
                         ApiErrorType::NotFound,
                         "NO_INVITE_FOUND",
                         "There is no invite found for this group",
-                        DATA.with(|data| Data::get_name(data)).as_str(),
+                        STABLE_DATA
+                            .with(|data| Data::get_name(data.borrow().get()))
+                            .as_str(),
                         "accept_user_request_group_invite",
                         None,
                     )),
@@ -1056,7 +1194,9 @@ impl Store {
                                 ApiErrorType::BadRequest,
                                 "INVALID_TYPE",
                                 "Invalid invite type",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "accept_user_request_group_invite",
                                 None,
                             ));
@@ -1076,11 +1216,14 @@ impl Store {
                         );
 
                         // Update the member
-                        let result =
-                            DATA.with(|data| Data::update_entry(data, _identifier, _member));
+                        let result = STABLE_DATA.with(|data| {
+                            ENTRIES.with(|entries| {
+                                Data::update_entry(data, entries, _identifier, _member)
+                            })
+                        });
 
                         // Update the member count on the group canister (inter-canister call)
-                        Self::update_member_count_on_group(&group_identifier);
+                        ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                         result
                     }
                 }
@@ -1093,7 +1236,7 @@ impl Store {
         caller: Principal,
         group_identifier: Principal,
     ) -> Result<(Principal, Member), ApiError> {
-        DATA.with(|data| {
+        STABLE_DATA.with(|data| {
             // Get the existing member
             match Self::_get_member_from_caller(caller) {
                 // If there is no member, throw an error
@@ -1110,7 +1253,7 @@ impl Store {
                             ApiErrorType::NotFound,
                             "NO_INVITE_FOUND",
                             "There is no invite found for this group",
-                            Data::get_name(data).as_str(),
+                            Data::get_name(data.borrow().get()).as_str(),
                             "accept_owner_request_group_invite",
                             None,
                         )),
@@ -1122,7 +1265,7 @@ impl Store {
                                     ApiErrorType::BadRequest,
                                     "INVALID_TYPE",
                                     "Invalid invite type",
-                                    Data::get_name(data).as_str(),
+                                    Data::get_name(data.borrow().get()).as_str(),
                                     "accept_owner_request_group_invite",
                                     None,
                                 ));
@@ -1141,10 +1284,12 @@ impl Store {
                                 },
                             );
                             // Update the member
-                            let result = Data::update_entry(data, _identifier, _member);
+                            let result = ENTRIES.with(|entries| {
+                                Data::update_entry(data, entries, _identifier, _member)
+                            });
 
                             // Update the member count on the group canister (inter-canister call)
-                            Self::update_member_count_on_group(&group_identifier);
+                            ic_cdk::spawn(Self::update_member_count_on_group(group_identifier));
                             result
                         }
                     }
@@ -1165,12 +1310,12 @@ impl Store {
             )
             .await;
 
-        DATA.with(|data| match group_privacy_response {
+        STABLE_DATA.with(|data| match group_privacy_response {
             Err(err) => Err(api_error(
                 ApiErrorType::BadRequest,
                 "INTER_CANISTER_CALL_FAILED",
                 err.1.as_str(),
-                Data::get_name(data).as_str(),
+                Data::get_name(data.borrow().get()).as_str(),
                 "get_group",
                 None,
             )),
@@ -1218,15 +1363,22 @@ impl Store {
 
     // Method to get a member by caller principal
     fn _get_member_from_caller(caller: Principal) -> Option<(Principal, Member)> {
-        let members = DATA.with(|data| Data::get_entries(data));
-        members
+        let members = ENTRIES.with(|entries| Data::get_entries(entries));
+        if let Some(member) = members
             .into_iter()
             .find(|(_, _member)| _member.principal == caller)
+        {
+            return Some((
+                Principal::from_text(member.0).unwrap_or(Principal::anonymous()),
+                member.1,
+            ));
+        }
+        return None;
     }
 
     // Method to get the member count for a specific group
     fn _get_member_count_for_group(group_identifier: &Principal) -> usize {
-        let members = DATA.with(|data| Data::get_entries(data));
+        let members = ENTRIES.with(|entries| Data::get_entries(entries));
         members
             .iter()
             .filter(|(_identifier, member)| {
@@ -1244,7 +1396,9 @@ impl Store {
             ApiErrorType::NotFound,
             "MEMBER_NOT_FOUND",
             "Member not found",
-            DATA.with(|data| Data::get_name(data)).as_str(),
+            STABLE_DATA
+                .with(|data| Data::get_name(data.borrow().get()))
+                .as_str(),
             method_name,
             inputs,
         )
@@ -1252,8 +1406,7 @@ impl Store {
 
     // [fire and forget]
     // Method to update the member count on the group canister (inter-canister call)
-    #[allow(unused_must_use)]
-    fn update_member_count_on_group(group_identifier: &Principal) -> () {
+    async fn update_member_count_on_group(group_identifier: Principal) -> () {
         // Get the member count for the group
         let group_member_count_array =
             Self::get_group_members_count(vec![group_identifier.clone()]);
@@ -1264,13 +1417,14 @@ impl Store {
             count = group_member_count_array[0].1;
         };
 
-        let (_, group_canister, _) = Identifier::decode(group_identifier);
+        let (_, group_canister, _) = Identifier::decode(&group_identifier);
         // Call the update_member_count method on the group canister and send the total amount of members of the group with it
-        call::call::<(Principal, Principal, usize), ()>(
+        let _ = call::call::<(Principal, Principal, usize), ()>(
             group_canister,
             "update_member_count",
-            (group_identifier.clone(), id(), count),
-        );
+            (group_identifier, id(), count),
+        )
+        .await;
     }
 
     // Method to check if a member has a specific permission
@@ -1406,7 +1560,9 @@ impl Store {
                         ApiErrorType::Unauthorized,
                         "PRINCIPAL_MISMATCH",
                         "Principal mismatch",
-                        DATA.with(|data| Data::get_name(data)).as_str(),
+                        STABLE_DATA
+                            .with(|data| Data::get_name(data.borrow().get()))
+                            .as_str(),
                         "check_permission",
                         None,
                     ));
@@ -1425,7 +1581,9 @@ impl Store {
                                 ApiErrorType::Unauthorized,
                                 "NO_PERMISSION",
                                 "No permission",
-                                DATA.with(|data| Data::get_name(data)).as_str(),
+                                STABLE_DATA
+                                    .with(|data| Data::get_name(data.borrow().get()))
+                                    .as_str(),
                                 "check_permission",
                                 None,
                             ));
@@ -1438,7 +1596,9 @@ impl Store {
                         ApiErrorType::Unauthorized,
                         "NO_PERMISSION",
                         err.as_str(),
-                        DATA.with(|data| Data::get_name(data)).as_str(),
+                        STABLE_DATA
+                            .with(|data| Data::get_name(data.borrow().get()))
+                            .as_str(),
                         "check_permission",
                         None,
                     )),
@@ -1449,7 +1609,9 @@ impl Store {
                 ApiErrorType::Unauthorized,
                 "NO_PERMISSION",
                 err.as_str(),
-                DATA.with(|data| Data::get_name(data)).as_str(),
+                STABLE_DATA
+                    .with(|data| Data::get_name(data.borrow().get()))
+                    .as_str(),
                 "check_permission",
                 None,
             )),
@@ -1464,7 +1626,7 @@ impl Store {
         chunk: usize,
         max_bytes_per_chunk: usize,
     ) -> (Vec<u8>, (usize, usize)) {
-        let members = DATA.with(|data| Data::get_entries(data));
+        let members = ENTRIES.with(|entries| Data::get_entries(entries));
         // Get members for filtering
         let mapped_members: Vec<JoinedMemberResponse> = members
             .iter()
@@ -1478,7 +1640,7 @@ impl Store {
             // Map member to joined member response
             .map(|(_identifier, _group_data)| {
                 Self::map_member_to_joined_member_response(
-                    _identifier,
+                    &Principal::from_text(_identifier).unwrap_or(Principal::anonymous()),
                     _group_data,
                     group_identifier.clone(),
                 )
@@ -1525,7 +1687,7 @@ impl Store {
         chunk: usize,
         max_bytes_per_chunk: usize,
     ) -> (Vec<u8>, (usize, usize)) {
-        let members = DATA.with(|data| Data::get_entries(data));
+        let members = ENTRIES.with(|entries| Data::get_entries(entries));
         // Get members for filtering
         let mapped_members: Vec<InviteMemberResponse> = members
             .iter()
@@ -1539,7 +1701,7 @@ impl Store {
             // Map member to joined member response
             .map(|(_identifier, _group_data)| {
                 Self::map_member_to_invite_member_response(
-                    _identifier,
+                    &Principal::from_text(_identifier).unwrap_or(Principal::anonymous()),
                     _group_data,
                     group_identifier.clone(),
                 )
