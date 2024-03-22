@@ -74,10 +74,10 @@ async fn assign_role(
     role: String,
     member_identifier: Principal,
     group_identifier: Principal,
-) -> Result<(), ()> {
+) -> Result<(), ApiError> {
     match Store::can_write_member(caller(), group_identifier).await {
         Ok(_) => Store::assign_role(role, member_identifier, group_identifier),
-        Err(_) => Err(()),
+        Err(err) => Err(err),
     }
 }
 
@@ -100,10 +100,10 @@ async fn set_roles(
     roles: Vec<String>,
     member_identifier: Principal,
     group_identifier: Principal,
-) -> Result<(), ()> {
+) -> Result<(), ApiError> {
     match Store::can_write_member(caller(), group_identifier).await {
         Ok(_) => Store::set_roles(roles, member_identifier, group_identifier),
-        Err(_) => Err(()),
+        Err(err) => Err(err),
     }
 }
 

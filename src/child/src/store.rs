@@ -303,7 +303,7 @@ impl Store {
         role: String,
         member_identifier: Principal,
         group_identifier: Principal,
-    ) -> Result<(), ()> {
+    ) -> Result<(), ApiError> {
         // Get the existing member
         let member = STABLE_DATA
             .with(|data| ENTRIES.with(|entries| Data::get_entry(data, entries, member_identifier)));
@@ -313,7 +313,16 @@ impl Store {
             if let Some(_joined) = _member.joined.get(&group_identifier) {
                 let existing_roles = _joined.roles.clone();
                 if existing_roles.contains(&role) {
-                    return Err(());
+                    return Err(api_error(
+                        ApiErrorType::BadRequest,
+                        "ALREADY_ASSIGNED",
+                        "The role is already assigned to the member",
+                        STABLE_DATA
+                            .with(|data| Data::get_name(data.borrow().get()))
+                            .as_str(),
+                        "assign_role",
+                        None,
+                    ));
                 }
 
                 match _member.joined.get_mut(&group_identifier) {
@@ -336,7 +345,16 @@ impl Store {
             }
             Ok(())
         } else {
-            Err(())
+            Err(api_error(
+                ApiErrorType::NotFound,
+                "MEMBER_NOT_FOUND",
+                "The member was not found",
+                STABLE_DATA
+                    .with(|data| Data::get_name(data.borrow().get()))
+                    .as_str(),
+                "assign_role",
+                None,
+            ))
         }
     }
 
@@ -345,7 +363,7 @@ impl Store {
         roles: Vec<String>,
         member_identifier: Principal,
         group_identifier: Principal,
-    ) -> Result<(), ()> {
+    ) -> Result<(), ApiError> {
         match ENTRIES.with(|entries| entries.borrow().get(&member_identifier.to_string())) {
             Some(mut _member) => {
                 // Get the existing roles for the group
@@ -372,7 +390,16 @@ impl Store {
                 }
                 Ok(())
             }
-            None => Err(()),
+            None => Err(api_error(
+                ApiErrorType::NotFound,
+                "MEMBER_NOT_FOUND",
+                "The member was not found",
+                STABLE_DATA
+                    .with(|data| Data::get_name(data.borrow().get()))
+                    .as_str(),
+                "set_roles",
+                None,
+            )),
         }
     }
 
